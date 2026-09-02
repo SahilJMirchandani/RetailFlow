@@ -605,7 +605,7 @@ Possible future improvements include:
 * Docker containerization
 * Cloud deployment
 
-* **Roll No. 37 (D12A) — Sahil Mirchandani**
+Made by Author :- **Roll No. 37 (D12A) — Sahil Mirchandani**
 
 ## 📌 Conclusion
 
