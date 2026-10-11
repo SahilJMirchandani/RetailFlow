@@ -6,6 +6,13 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from dashboard.currency import (
+    USD_TO_INR_RATE,
+    USD_TO_INR_RATE_AS_OF,
+    USD_TO_INR_SOURCE_URL,
+    convert_usd_to_inr,
+)
+
 
 # --------------------------------------------------
 # CONFIGURATION
@@ -316,7 +323,14 @@ if page == "Platform Overview":
 
     order_count = len(fact_orders)
     item_count = len(fact_items)
-    customer_count = len(customers)
+    customer_count = (
+        customers["customer_unique_id"].nunique()
+        if (
+            not customers.empty
+            and "customer_unique_id" in customers.columns
+        )
+        else 0
+    )
 
     product_revenue = (
         pd.to_numeric(fact_items["item_price"], errors="coerce").sum()
@@ -342,7 +356,7 @@ if page == "Platform Overview":
 
     col1.metric("Olist Orders", f"{order_count:,}")
     col2.metric("Order Items", f"{item_count:,}")
-    col3.metric("Marketplace Customers", f"{customer_count:,}")
+    col3.metric("Unique Marketplace Customers", f"{customer_count:,}")
 
     col4, col5, col6 = st.columns(3)
 
@@ -500,6 +514,13 @@ elif page == "Product Gallery":
         "whenever the file is available."
     )
 
+    st.markdown(
+        f"**Price display:** USD amounts converted to INR at "
+        f"₹{USD_TO_INR_RATE:,.4f} per US$1 "
+        f"(FBIL reference rate, {USD_TO_INR_RATE_AS_OF}; fixed, not live). "
+        f"[Source: NSE India]({USD_TO_INR_SOURCE_URL})"
+    )
+
     if products.empty:
         st.warning(
             "Product catalogue is missing. Run "
@@ -622,8 +643,10 @@ elif page == "Product Gallery":
                     product.get("price"), errors="coerce"
                 )
 
-                if pd.notna(price):
-                    st.write(f"**${price:,.2f}**")
+                price_inr = convert_usd_to_inr(price)
+
+                if price_inr is not None:
+                    st.write(f"**₹{price_inr:,.2f}**")
 
                 rating = product.get("rating")
 
@@ -720,6 +743,17 @@ elif page == "Olist Analytics":
                 start_date, end_date
             )
         ]
+
+    # Keep payment-method totals in sync with the selected order-date range.
+    if not payments.empty:
+        selected_order_ids = set(
+            orders["order_id"].dropna().astype(str)
+        )
+        filtered_payments = payments[
+            payments["order_id"].astype(str).isin(selected_order_ids)
+        ].copy()
+    else:
+        filtered_payments = payments.copy()
 
     total_orders = len(orders)
     total_items = len(items)
@@ -840,9 +874,9 @@ elif page == "Olist Analytics":
 
     st.markdown("### Payment Methods")
 
-    if not payments.empty:
+    if not filtered_payments.empty:
         payment_summary = (
-            payments.groupby("payment_type", as_index=False)
+            filtered_payments.groupby("payment_type", as_index=False)
             .agg(
                 payment_records=("order_id", "count"),
                 payment_value=("payment_value", "sum"),
