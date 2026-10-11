@@ -242,7 +242,12 @@ def validate_catalog(df, reported_total):
 
     # An image is considered present when a thumbnail URL exists.
     products_with_images = int(
-        df["thumbnail_url"].notna().sum()
+        df["thumbnail_url"]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+        .ne("")
+        .sum()
     )
 
     total_image_urls = sum(
@@ -305,7 +310,7 @@ def ingest_product_catalog():
 
         # Preserve the original API responses in Bronze.
         timestamp = datetime.now(timezone.utc).strftime(
-            "%Y%m%dT%H%M%SZ"
+            "%Y%m%dT%H%M%S%fZ"
         )
 
         bronze_file = (
