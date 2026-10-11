@@ -1,6 +1,8 @@
 venv/
+.venv/
 __pycache__/
 *.pyc
+.pytest_cache/
 .env
 *.log
 
@@ -11,3 +13,10 @@ data/output/
 .ipynb_checkpoints/
 .vscode/
 .idea/
+.streamlit/secrets.toml
+
+# RetailFlow 2.0 data layers and downloaded assets
+data/bronze/
+data/silver/
+data/gold/
+data/catalog_images/

@@ -153,7 +153,8 @@ def load_data():
                 """
             )
 
-        connection.commit()
+        # Keep the TRUNCATE and replacement INSERTs in the same
+        # transaction. A failed load can then roll back to the old data.
 
         # --------------------------------------------------
         # PREPARE DATA
@@ -225,8 +226,6 @@ def load_data():
                 records
             )
 
-        connection.commit()
-
         # --------------------------------------------------
         # VERIFY RECORD COUNT
         # --------------------------------------------------
@@ -266,13 +265,13 @@ def load_data():
         # --------------------------------------------------
 
         if database_count != len(records):
-
-            print(
-                "\nERROR: Database record count "
-                "does not match source records."
+            raise RuntimeError(
+                "Database record count does not match source records: "
+                f"loaded={database_count}, expected={len(records)}."
             )
 
-            return False
+        # Commit only after the replacement data passes count verification.
+        connection.commit()
 
         print(
             "\nDatabase verification successful!"
