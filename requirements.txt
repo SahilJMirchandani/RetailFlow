@@ -1,3 +1,4 @@
+
 pandas
 numpy
 openpyxl
@@ -6,4 +7,8 @@ psycopg[binary]
 scikit-learn
 streamlit
 plotly
-pytestpython-dotenv
+pytest
+python-dotenv
+pyarrow
+requests
+duckdb

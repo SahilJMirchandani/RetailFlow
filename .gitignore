@@ -11,3 +11,9 @@ data/output/
 .ipynb_checkpoints/
 .vscode/
 .idea/
+
+# RetailFlow 2.0 data layers and downloaded assets
+data/bronze/
+data/silver/
+data/gold/
+data/catalog_images/
