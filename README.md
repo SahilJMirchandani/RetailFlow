@@ -1,616 +1,242 @@
-# RetailFlow: E-Commerce Sales Data Pipeline
+# RetailFlow — E-Commerce Data Engineering Platform
 
-A prototype Data Engineering platform demonstrating how an automated e-commerce data pipeline can transform raw transactional data into actionable business insights and revenue forecasts.
+**RetailFlow** is a Data Engineering mini project that demonstrates data ingestion, layered ETL, data quality, analytical modelling, orchestration, data lineage, forecasting, and dashboard visualisation.
 
-## 📌 Project Overview
+The repository contains **two separate data workflows**. They share the project but not the same source data or currency.
 
-**RetailFlow** is a Data Engineering mini project built around the **Online Retail transactional dataset**.
+## 1. Project tracks
 
-The project demonstrates an end-to-end data pipeline that:
+### Track A — Original Online Retail pipeline
 
-* Ingests raw transactional data
-* Validates data quality
-* Cleans and transforms the dataset
-* Stores processed transactions in PostgreSQL
-* Generates business analytics
-* Forecasts future revenue using Machine Learning
-* Displays insights through an interactive Streamlit dashboard
-* Automates the complete workflow through a pipeline orchestrator
-* Performs automated testing using Pytest
-
-The primary focus of the project is **Data Engineering**, while revenue forecasting is implemented as a downstream analytical component.
-
----
-
-## 🎯 Objectives
-
-1. Build an end-to-end e-commerce data pipeline.
-2. Perform data ingestion and validation on raw transactional data.
-3. Clean and transform large-scale transactional records.
-4. Store structured data in a PostgreSQL database.
-5. Generate meaningful business analytics from the stored data.
-6. Implement revenue forecasting using a Random Forest model.
-7. Develop an interactive Streamlit dashboard.
-8. Automate the complete pipeline using a Python pipeline orchestrator.
-9. Implement automated tests and error handling.
-
----
-
-## 🏗️ System Architecture
+This is the original UK-retailer workflow:
 
 ```text
-                    ┌──────────────────────┐
-                    │   Online Retail.xlsx │
-                    │      Raw Dataset      │
-                    └──────────┬───────────┘
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │   Data Ingestion      │
-                    │ ingest_data.py        │
-                    └──────────┬───────────┘
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │   Data Validation     │
-                    │ validate_data.py      │
-                    └──────────┬───────────┘
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │ ETL / Transformation  │
-                    │ transform_data.py     │
-                    └──────────┬───────────┘
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │     PostgreSQL        │
-                    │      retailflow       │
-                    │ sales_transactions    │
-                    └──────────┬───────────┘
-                               │
-                  ┌────────────┴────────────┐
-                  ▼                         ▼
-       ┌──────────────────┐       ┌──────────────────┐
-       │    Analytics     │       │   Forecasting    │
-       │ Business Metrics │       │ Random Forest ML │
-       └────────┬─────────┘       └────────┬─────────┘
-                │                          │
-                └────────────┬─────────────┘
-                             ▼
-                  ┌──────────────────────┐
-                  │ Streamlit Dashboard  │
-                  │ Interactive Insights │
-                  └──────────────────────┘
+Online Retail.xlsx
+      ↓
+Ingestion and validation
+      ↓
+Cleaning and transformation
+      ↓
+PostgreSQL: retailflow.sales_transactions
+      ↓
+Business analytics + 30-day revenue forecast
+      ↓
+Streamlit dashboard
 ```
 
----
+The recorded run processed **541,909 raw rows** and produced **524,878 cleaned transactions**. Its analytics are denominated in **British pounds (£)**.
 
-## 🔄 Data Pipeline
+Recorded business metrics:
 
-The complete automated workflow consists of six major stages:
+| Metric | Recorded result |
+|---|---:|
+| Cleaned transactions | 524,878 |
+| Revenue | £10,642,110.80 |
+| Orders | 19,960 |
+| Unique customers | 4,338 |
+| Average order value | £533.17 |
+| Forecast horizon | 30 days |
+
+The metrics above describe the saved run and may change if the input dataset or pipeline is changed.
+
+### Track B — RetailFlow 2.0 multi-source data platform
+
+The V2 workflow adds an external product catalogue, local product-image ingestion, and the Brazilian Olist marketplace dataset. It implements the **Bronze → Silver → Gold** pattern for Olist data.
 
 ```text
-Data Ingestion
-      ↓
-Data Validation
-      ↓
-ETL / Transformation
-      ↓
-PostgreSQL Loading
-      ↓
-Analytics Generation
-      ↓
-Revenue Forecasting
+DummyJSON product API ──→ Bronze API snapshot
+         │                       ↓
+         ├──→ Silver product catalogue ──→ product-image downloader
+         │
+Olist CSV files ──→ Bronze Parquet
+                         ↓
+                    Silver tables
+                         ↓
+            Gold dimensions + fact tables
+                         ↓
+          Business sales aggregates + quality reports
 ```
 
-The pipeline stops automatically if a stage encounters an error.
+The orchestrator runs five stages in order:
 
----
+1. Product Catalogue API Ingestion
+2. Product Image Ingestion
+3. Olist Bronze Ingestion
+4. Olist Silver Transformation
+5. Olist Gold Warehouse
 
-## 📊 Dataset
+A stage failure stops the sequence. The V2 workflow writes timestamped logs and a latest-run record plus append-only JSONL history to `data/output/`.
 
-The project uses the **Online Retail dataset**, containing transactional records from an e-commerce retailer.
+**Important:** DummyJSON's sample product IDs and Olist product IDs belong to different sources. RetailFlow does not treat them as matching keys. Olist measures remain in Brazilian reais (R$); the original Online Retail track remains in pounds (£). Product-gallery INR is a display conversion only and does not rewrite source data.
 
-### Raw Dataset
+## 2. V2 data model
 
-* Records: **541,909**
-* Columns: **8**
-* File format: Excel (`.xlsx`)
+Olist's nine CSV files are ingested to Bronze Parquet, standardized and validated in Silver, and transformed to Gold Parquet tables.
 
-The raw dataset is intentionally **not included in this repository** because of its size.
+| Gold table | Grain / purpose |
+|---|---|
+| `dim_customers` | Customer dimension |
+| `dim_products` | Product dimension |
+| `dim_sellers` | Seller dimension |
+| `dim_date` | Calendar dimension |
+| `fact_orders` | One row per order |
+| `fact_order_items` | One row per order-item |
+| `gold_daily_sales` | Daily business aggregates |
+| `gold_category_sales` | Category aggregates |
+| `gold_seller_performance` | Seller aggregates |
 
-Place the dataset at:
+Quality checks include schema and row-count validation, duplicate-key checks, dimension-key checks, fact-to-dimension relationship checks, row-count reconciliation, and revenue reconciliation across fact and aggregate outputs.
+
+Product catalogue ingestion retrieves records from the [DummyJSON products API](https://dummyjson.com/products). The image downloader stores image files locally and records their source URLs and local paths in a manifest. Image files and downloaded datasets are intentionally excluded from Git.
+
+## 3. Repository layout
+
+```text
+RetailFlow/
+├── dashboard/
+│   ├── app.py                     # Original dashboard
+│   └── retailflow_v2_app.py       # V2 product/Olist dashboard
+├── ingestion/
+│   ├── ingest_data.py             # Original workbook ingestion
+│   ├── ingest_product_catalog.py   # Product API ingestion
+│   ├── download_product_images.py # Local catalogue images
+│   └── ingest_olist.py            # Olist CSV → Bronze Parquet
+├── etl/
+│   ├── ...                        # Original ETL modules
+│   ├── transform_olist_silver.py  # Bronze → Silver
+│   └── build_olist_gold.py        # Silver → Gold
+├── pipeline/
+│   ├── run_pipeline.py            # Original six-stage workflow
+│   └── run_retailflow_v2.py       # V2 five-stage orchestrator
+├── tests/                         # Unit and data-dependent checks
+├── data/
+│   ├── raw/                       # Local input data (not committed)
+│   ├── bronze/                    # V2 raw/layered outputs (not committed)
+│   ├── silver/
+│   ├── gold/
+│   ├── processed/
+│   ├── output/                    # Reports, forecasts and run lineage
+│   └── catalog_images/            # Downloaded product images
+├── requirements.txt
+└── README.md
+```
+
+The exact local folder contents vary by which workflows have been run. Generated datasets, images, forecasts, logs, reports, and local credentials are excluded from Git.
+
+## 4. Setup
+
+Use Python 3.11 for the documented environment.
+
+### Windows PowerShell
+
+```powershell
+git clone https://github.com/SahilJMirchandani/RetailFlow.git
+cd RetailFlow
+
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+If PowerShell blocks environment activation, use Command Prompt instead:
+
+```bat
+.venv\Scripts\activate.bat
+```
+
+## 5. Run Track A — Original Online Retail
+
+Obtain the Online Retail workbook separately. It is not stored in this repository.
+
+The simplest location is:
 
 ```text
 data/raw/Online Retail.xlsx
 ```
 
-The ingestion module can also copy the dataset from the configured source location into the project's raw data directory.
+Then run:
 
----
-
-## 🧹 Data Validation
-
-The validation stage checks:
-
-* Dataset schema
-* Missing values
-* Duplicate records
-* Invalid quantities
-* Invalid prices
-* Invalid invoice dates
-* Cancelled transactions
-
-### Validation Results
-
-| Check                    |  Result |
-| ------------------------ | ------: |
-| Raw records              | 541,909 |
-| Missing values           | 136,534 |
-| Duplicate records        |   5,268 |
-| Invalid quantity records |  10,624 |
-| Invalid price records    |   2,517 |
-| Invalid date records     |       0 |
-| Cancelled transactions   |   9,288 |
-
-A validation report is generated in:
-
-```text
-data/output/validation_report.txt
-```
-
----
-
-## 🔧 ETL and Transformation
-
-The ETL stage performs:
-
-* Duplicate removal
-* Cancellation filtering
-* Invalid quantity removal
-* Invalid price removal
-* Date conversion
-* Revenue calculation
-* Daily revenue aggregation
-
-### ETL Results
-
-| Metric             |   Value |
-| ------------------ | ------: |
-| Initial records    | 541,909 |
-| Cleaned records    | 524,878 |
-| Daily revenue rows |     305 |
-
-Processed files:
-
-```text
-data/processed/cleaned_transactions.csv
-data/processed/daily_revenue.csv
-```
-
----
-
-## 🗄️ PostgreSQL Database
-
-The cleaned transactional data is stored in PostgreSQL.
-
-### Database
-
-```text
-Database: retailflow
-Table: sales_transactions
-Port: 5432
-```
-
-### Main Table Structure
-
-| Column           | Type               |
-| ---------------- | ------------------ |
-| transaction_id   | SERIAL PRIMARY KEY |
-| invoice_no       | VARCHAR            |
-| stock_code       | VARCHAR            |
-| description      | TEXT               |
-| quantity         | INTEGER            |
-| invoice_date     | TIMESTAMP          |
-| unit_price       | NUMERIC            |
-| customer_id      | NUMERIC            |
-| country          | VARCHAR            |
-| revenue          | NUMERIC            |
-| transaction_date | DATE               |
-
-### Database Verification
-
-```text
-Records loaded: 524,878
-Database records: 524,878
-```
-
-The database loader is designed to avoid duplicate loading during repeated pipeline executions.
-
----
-
-## 📈 Analytics
-
-The analytics module generates business insights from PostgreSQL data.
-
-Generated outputs include:
-
-```text
-revenue_by_country.csv
-top_products.csv
-daily_revenue.csv
-monthly_revenue.csv
-```
-
-### Final Business Metrics
-
-| Metric              |          Value |
-| ------------------- | -------------: |
-| Total Records       |        524,878 |
-| Total Quantity Sold |      5,572,420 |
-| Total Revenue       | £10,642,110.80 |
-| Unique Customers    |          4,338 |
-| Total Orders        |         19,960 |
-| Average Order Value |        £533.17 |
-
-The analytics stage helps identify:
-
-* Revenue trends
-* Top-performing countries
-* Top-selling products
-* Monthly revenue patterns
-* Overall sales performance
-
----
-
-## 🤖 Revenue Forecasting
-
-RetailFlow includes a downstream revenue forecasting component using **Random Forest Regression**.
-
-### Features
-
-The model uses:
-
-* Day of week
-* Day of month
-* Month
-* Week of year
-* Lag 1 day
-* Lag 7 days
-* Lag 14 days
-* 7-day rolling revenue mean
-
-### Model Configuration
-
-```text
-Algorithm: Random Forest Regressor
-Estimators: 100
-Maximum Depth: 10
-Minimum Samples Leaf: 4
-Minimum Samples Split: 2
-Random State: 42
-```
-
-### Evaluation Results
-
-| Metric |    Result |
-| ------ | --------: |
-| MAE    | 15,271.11 |
-| RMSE   | 25,319.01 |
-| R²     |    0.3375 |
-
-The system generates a **30-day future revenue forecast**.
-
-Output:
-
-```text
-data/output/revenue_forecast.csv
-```
-
----
-
-## 📊 Streamlit Dashboard
-
-RetailFlow provides an interactive dashboard built using Streamlit and Plotly.
-
-### Dashboard Features
-
-* Date-range filtering
-* Country filtering
-* Total revenue KPI
-* Total orders KPI
-* Units sold KPI
-* Customer count KPI
-* Average order value
-* Revenue trend visualization
-* Monthly revenue analysis
-* Top countries by revenue
-* Top products by revenue
-* Product-level details
-* 30-day revenue forecast
-* Forecast KPIs
-* Forecast visualization
-* Forecast details table
-
-Run the dashboard using:
-
-```bash
+```powershell
+python pipeline/run_pipeline.py
 streamlit run dashboard/app.py
 ```
 
----
+The ingestion script also supports an alternate workbook location using the `RETAILFLOW_ONLINE_RETAIL_SOURCE` environment variable. For example, in PowerShell for the current terminal session:
 
-## ⚙️ Pipeline Automation
-
-The complete workflow is automated using:
-
-```text
-pipeline/run_pipeline.py
-```
-
-It executes:
-
-```text
-1. Data Ingestion
-2. Data Validation
-3. ETL / Transformation
-4. PostgreSQL Data Loading
-5. Analytics Generation
-6. Revenue Forecasting
-```
-
-The pipeline provides:
-
-* Sequential execution
-* Stage-level status reporting
-* Error detection
-* Failure handling
-* Execution time measurement
-* Final pipeline summary
-
-### Verified Pipeline Run
-
-```text
-Pipeline stages completed: 6/6
-Execution time: ~2 minutes 36 seconds
-Database records: 524,878
-Total revenue: £10,642,110.80
-Total orders: 19,960
-```
-
----
-
-## 🧪 Testing
-
-Automated tests are implemented using **Pytest**.
-
-The test suite verifies:
-
-* Raw dataset availability
-* Processed dataset availability
-* Dataset non-emptiness
-* Required columns
-* Positive quantities
-* Positive prices
-* Revenue calculation
-* Forecast file generation
-* Exactly 30 forecast days
-* Non-negative forecast values
-* Analytics output generation
-
-### Test Result
-
-```text
-11 passed
-```
-
-Run the tests using:
-
-```bash
-python -m pytest -v
-```
-
----
-
-## 📁 Project Structure
-
-```text
-RetailFlow/
-│
-├── data/
-│   ├── raw/
-│   ├── processed/
-│   └── output/
-│
-├── ingestion/
-│   └── ingest_data.py
-│
-├── validation/
-│   └── validate_data.py
-│
-├── etl/
-│   └── transform_data.py
-│
-├── database/
-│   └── load_data.py
-│
-├── analytics/
-│   └── generate_analytics.py
-│
-├── forecasting/
-│   └── forecast_revenue.py
-│
-├── dashboard/
-│   └── app.py
-│
-├── pipeline/
-│   └── run_pipeline.py
-│
-├── tests/
-│   └── test_pipeline.py
-│
-├── .gitignore
-├── README.md
-├── requirements.txt
-└── .env
-```
-
----
-
-## 🛠️ Technology Stack
-
-| Technology    | Purpose                    |
-| ------------- | -------------------------- |
-| Python        | Core development           |
-| Pandas        | Data processing            |
-| NumPy         | Numerical operations       |
-| OpenPyXL      | Excel dataset handling     |
-| PostgreSQL    | Data storage               |
-| SQLAlchemy    | Database connectivity      |
-| Scikit-learn  | Revenue forecasting        |
-| Streamlit     | Dashboard                  |
-| Plotly        | Interactive visualizations |
-| Pytest        | Automated testing          |
-| python-dotenv | Environment configuration  |
-| Git & GitHub  | Version control            |
-
----
-
-## 🚀 Installation and Setup
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/YOUR_USERNAME/RetailFlow.git
-cd RetailFlow
-```
-
-### 2. Create a virtual environment
-
-```bash
-python -m venv venv
-```
-
-Activate it on Windows:
-
-```bash
-venv\Scripts\activate
-```
-
-### 3. Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Configure environment variables
-
-Create a `.env` file containing your PostgreSQL configuration.
-
-Example:
-
-```text
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=retailflow
-DB_USER=postgres
-DB_PASSWORD=your_password
-```
-
-**Do not commit `.env` to GitHub.**
-
-### 5. Add the dataset
-
-Place:
-
-```text
-Online Retail.xlsx
-```
-
-inside:
-
-```text
-data/raw/
-```
-
-### 6. Run the complete pipeline
-
-```bash
+```powershell
+$env:RETAILFLOW_ONLINE_RETAIL_SOURCE = "C:\path\to\Online Retail.xlsx"
 python pipeline/run_pipeline.py
 ```
 
-### 7. Launch the dashboard
+The original workflow loads to PostgreSQL. Configure the connection values required by the original database loader in your local environment; never commit passwords or a real `.env` file.
 
-```bash
-streamlit run dashboard/app.py
-```
+## 6. Run Track B — RetailFlow 2.0
 
----
+### Prepare Olist inputs
 
-## 📝 Important Repository Notes
-
-Large datasets and generated runtime files are excluded from GitHub through `.gitignore`.
-
-The following are intentionally not committed:
+Download the public [Brazilian E-Commerce Public Dataset by Olist](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce) separately. Create `data/raw/olist/` and place the nine CSV files there with these exact filenames:
 
 ```text
-.env
-venv/
-data/raw/
-data/processed/
-data/output/
+olist_customers_dataset.csv
+olist_geolocation_dataset.csv
+olist_order_items_dataset.csv
+olist_order_payments_dataset.csv
+olist_order_reviews_dataset.csv
+olist_orders_dataset.csv
+olist_products_dataset.csv
+olist_sellers_dataset.csv
+product_category_name_translation.csv
 ```
 
-This keeps the repository lightweight and prevents database credentials or local environment files from being exposed.
+The input data is not included in the repository. The folder and its contents should remain local.
 
----
+### Run the V2 orchestrator
 
-## ✅ Final Results
+From the project root, with your virtual environment activated and an internet connection for the product API and image downloads:
 
-RetailFlow successfully demonstrates an end-to-end Data Engineering workflow.
+```powershell
+python pipeline/run_retailflow_v2.py
+```
 
-| Category              |                 Result |
-| --------------------- | ---------------------: |
-| Raw records processed |                541,909 |
-| Cleaned records       |                524,878 |
-| PostgreSQL records    |                524,878 |
-| Total revenue         |         £10,642,110.80 |
-| Total orders          |                 19,960 |
-| Unique customers      |                  4,338 |
-| Average order value   |                £533.17 |
-| Forecast horizon      |                30 days |
-| Forecast R²           |                 0.3375 |
-| Automated tests       |           11/11 passed |
-| Pipeline stages       |                      6 |
-| Pipeline runtime      |          ~2 min 36 sec |
-| Pipeline status       | Successfully completed |
+The orchestrator runs the five stages in sequence. It returns a non-zero exit code when the run does not succeed. Inspect the run log and the reports under `data/output/` if it stops.
 
----
+### Launch the V2 dashboard
 
-## 🔮 Future Scope
+```powershell
+streamlit run dashboard/retailflow_v2_app.py
+```
 
-Possible future improvements include:
+The V2 dashboard presents Platform Overview, Product Gallery, Olist Analytics, and Data Quality & Lineage. It reads generated local outputs; run the V2 pipeline first to populate its data files. The dashboard is separate from `dashboard/app.py`.
 
-* Apache Airflow-based orchestration
-* Real-time data ingestion
-* Cloud database deployment
-* Data warehouse integration
-* Incremental ETL processing
-* Automated data quality monitoring
-* Advanced forecasting models
-* Customer segmentation
-* Sales anomaly detection
-* Role-based dashboard access
-* Docker containerization
-* Cloud deployment
+## 7. Tests and continuous integration
 
-Made by Author :- **Roll No. 37 (D12A) — Sahil Mirchandani**
+Run tests from the repository root:
 
-## 📌 Conclusion
+```powershell
+python -m compileall -q dashboard ingestion etl pipeline tests
+python -m pytest -q
+```
 
-RetailFlow demonstrates how raw e-commerce transaction data can be converted into a reliable analytical data platform through a structured Data Engineering pipeline.
+Self-contained tests cover dataset-path resolution, ingestion behavior, stage execution, run-history writing, and exclusion of stale metrics from stages that did not succeed.
 
-The system integrates **data ingestion, validation, ETL, PostgreSQL storage, analytics, machine-learning-based forecasting, dashboard visualization, automation, and testing** into a single workflow.
+The legacy tests in `tests/test_pipeline.py` validate outputs generated by Track A. They are skipped when the local cleaned output is unavailable. Run Track A first to exercise them. V2 end-to-end quality reports are generated by the actual Olist and catalogue pipelines and require their local input datasets.
 
-The project successfully completed the complete automated pipeline with **6 stages and 11/11 automated tests passing**, providing a practical demonstration of an end-to-end Data Engineering system.
+GitHub Actions runs Python compilation and the test suite on pushes to the main and feature branches and for pull requests to main. The CI job does not download the private/local datasets or run network-dependent ingestion stages.
+
+## 8. Important data and security notes
+
+- Do not commit `.env`, passwords, access tokens, or database credentials.
+- Input datasets and generated Bronze/Silver/Gold Parquet, CSV outputs, logs, reports, and product images are intentionally ignored by Git.
+- The DummyJSON catalogue is a sample API, not a canonical retail inventory.
+- USD→INR product prices, if displayed, use a documented fixed reference rate for presentation; they are not financial quotes and are not persisted back to source data.
+- Do not compare or combine revenue across the UK-retailer and Brazilian-marketplace tracks without explicitly accounting for their different currencies and datasets.
+
+## 9. Technology stack
+
+Python · pandas · NumPy · PyArrow/Parquet · DuckDB · PostgreSQL · scikit-learn · Streamlit · Plotly · Requests · Pytest · GitHub Actions
+
+## 10. Next improvements
+
+Potential later enhancements include incremental ingestion, snapshot freshness checks, schema versioning, a more formal data-contract layer, Docker packaging, deployment, and scheduled execution. They are intentionally separate from the current scope so the existing workflows stay understandable and reproducible.
