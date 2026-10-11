@@ -170,7 +170,13 @@ $env:RETAILFLOW_ONLINE_RETAIL_SOURCE = "C:\path\to\Online Retail.xlsx"
 python pipeline/run_pipeline.py
 ```
 
-The original workflow loads to PostgreSQL. Configure the connection values required by the original database loader in your local environment; never commit passwords or a real `.env` file.
+The original workflow loads to PostgreSQL. Copy the safe template and edit the local values:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Update `.env` with your own PostgreSQL credentials. Make sure the PostgreSQL server and `retailflow` database exist before running the pipeline. The loader reads `.env` locally. Never commit passwords or the real `.env` file.
 
 ## 6. Run Track B — RetailFlow 2.0
 
