@@ -15,6 +15,7 @@ from dashboard.currency import (
     USD_TO_INR_SOURCE_URL,
     convert_brl_to_inr,
     convert_usd_to_inr,
+    format_brl_as_inr,
 )
 
 
@@ -120,10 +121,7 @@ def load_catalog():
 def format_currency(value):
     """Format a source BRL amount as INR for dashboard display only."""
 
-    amount_inr = convert_brl_to_inr(value)
-    if amount_inr is None:
-        amount_inr = 0.0
-    return f"₹{amount_inr:,.2f}"
+    return format_brl_as_inr(value)
 
 
 def convert_brl_columns(dataframe, columns):
@@ -987,6 +985,12 @@ elif page == "Olist Analytics":
             payment_summary,
             use_container_width=True,
             hide_index=True,
+            column_config={
+                "payment_value": st.column_config.NumberColumn(
+                    "Payment Value (INR)",
+                    format="₹%.2f",
+                ),
+            },
         )
 
     with st.expander("View daily sales table"):
@@ -994,6 +998,20 @@ elif page == "Olist Analytics":
             daily.sort_values("order_date"),
             use_container_width=True,
             hide_index=True,
+            column_config={
+                "product_revenue": st.column_config.NumberColumn(
+                    "Product Revenue (INR)",
+                    format="₹%.2f",
+                ),
+                "freight_total": st.column_config.NumberColumn(
+                    "Freight Total (INR)",
+                    format="₹%.2f",
+                ),
+                "payment_total": st.column_config.NumberColumn(
+                    "Payment Total (INR)",
+                    format="₹%.2f",
+                ),
+            },
         )
 
 
