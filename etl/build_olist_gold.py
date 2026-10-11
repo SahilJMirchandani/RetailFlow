@@ -505,6 +505,58 @@ def build_olist_gold():
                  WHERE date_key IS NULL)
         """).fetchone()[0])
 
+        foreign_key_violations = {
+            "fact_orders.customer_id": int(con.execute("""
+                SELECT COUNT(*)
+                FROM fact_orders f
+                LEFT JOIN dim_customers d
+                  ON f.customer_id = d.customer_id
+                WHERE d.customer_id IS NULL
+            """).fetchone()[0]),
+            "fact_orders.purchase_date_key": int(con.execute("""
+                SELECT COUNT(*)
+                FROM fact_orders f
+                LEFT JOIN dim_date d
+                  ON f.purchase_date_key = d.date_key
+                WHERE d.date_key IS NULL
+            """).fetchone()[0]),
+            "fact_order_items.order_id": int(con.execute("""
+                SELECT COUNT(*)
+                FROM fact_order_items f
+                LEFT JOIN fact_orders o
+                  ON f.order_id = o.order_id
+                WHERE o.order_id IS NULL
+            """).fetchone()[0]),
+            "fact_order_items.customer_id": int(con.execute("""
+                SELECT COUNT(*)
+                FROM fact_order_items f
+                LEFT JOIN dim_customers d
+                  ON f.customer_id = d.customer_id
+                WHERE d.customer_id IS NULL
+            """).fetchone()[0]),
+            "fact_order_items.product_id": int(con.execute("""
+                SELECT COUNT(*)
+                FROM fact_order_items f
+                LEFT JOIN dim_products d
+                  ON f.product_id = d.product_id
+                WHERE d.product_id IS NULL
+            """).fetchone()[0]),
+            "fact_order_items.seller_id": int(con.execute("""
+                SELECT COUNT(*)
+                FROM fact_order_items f
+                LEFT JOIN dim_sellers d
+                  ON f.seller_id = d.seller_id
+                WHERE d.seller_id IS NULL
+            """).fetchone()[0]),
+            "fact_order_items.purchase_date_key": int(con.execute("""
+                SELECT COUNT(*)
+                FROM fact_order_items f
+                LEFT JOIN dim_date d
+                  ON f.purchase_date_key = d.date_key
+                WHERE d.date_key IS NULL
+            """).fetchone()[0]),
+        }
+
         silver_item_count = count_rows(con, "s_order_items")
         silver_order_count = count_rows(con, "s_orders")
 
@@ -554,6 +606,10 @@ def build_olist_gold():
                 count == 0
                 for count in duplicate_key_counts.values()
             ),
+            "all_fact_foreign_keys_resolve": all(
+                count == 0
+                for count in foreign_key_violations.values()
+            ),
             "fact_item_count_matches_silver":
                 fact_item_count == silver_item_count,
             "fact_order_count_matches_silver":
@@ -585,6 +641,7 @@ def build_olist_gold():
             "output_files": output_files,
             "duplicate_key_groups": duplicate_key_counts,
             "invalid_dimension_keys": invalid_dimension_keys,
+            "foreign_key_violations": foreign_key_violations,
             "reconciliation": {
                 "silver_order_count": silver_order_count,
                 "fact_order_count": fact_order_count,
