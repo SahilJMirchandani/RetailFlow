@@ -125,7 +125,7 @@ The exact local folder contents vary by which workflows have been run. Generated
 
 ## 4. Setup
 
-Use Python 3.11 for the documented environment.
+Use Python 3.11 or 3.13. CI tests both versions.
 
 ### Windows PowerShell
 
