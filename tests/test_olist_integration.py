@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 
 import pandas as pd
+import pytest
 from pandas.testing import assert_frame_equal
 
 
@@ -412,3 +413,58 @@ def test_silver_quality_gate_rejects_duplicate_customer_keys(
         silver_report["key_quality"]["customers"]["duplicate_key_groups"]
         == 1
     )
+
+
+
+def test_failed_silver_write_preserves_previous_published_layer(
+    monkeypatch, tmp_path
+):
+    """A partial staging write must not alter the current Silver outputs."""
+
+    sandbox = prepare_sandbox(monkeypatch, tmp_path)
+    run_bronze_silver_gold(sandbox)
+
+    silver_dir = sandbox["silver_dir"]
+    files_before = {
+        path.name: sha256(path)
+        for path in sorted(silver_dir.glob("*.parquet"))
+    }
+    assert len(files_before) == 9
+
+    silver_module = sandbox["silver_module"]
+    original_writer = silver_module.write_silver_parquet
+
+    def fail_after_staging_one_table(con, view, output_path):
+        original_writer(con, view, output_path)
+        if view == "silver_orders":
+            raise RuntimeError("simulated Silver write failure")
+
+    monkeypatch.setattr(
+        silver_module,
+        "write_silver_parquet",
+        fail_after_staging_one_table,
+    )
+
+    with pytest.raises(RuntimeError, match="simulated Silver write failure"):
+        silver_module.transform_olist_silver()
+
+    files_after = {
+        path.name: sha256(path)
+        for path in sorted(silver_dir.glob("*.parquet"))
+    }
+    assert files_after == files_before
+
+    # The failed attempt has a current, explicit failure report rather than
+    # leaving the prior successful report as if the latest run had passed.
+    failure_report = json.loads(
+        (
+            sandbox["output_dir"] / "olist_silver_quality.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert failure_report["passed"] is False
+    assert failure_report["published"] is False
+    assert failure_report["publish_status"] == "failed_before_publish"
+
+    # Temporary staging data is removed on the exception path.
+    assert not list(silver_dir.parent.glob(".olist.staging-*"))
+    assert not list(silver_dir.parent.glob(".olist.backup-*"))
