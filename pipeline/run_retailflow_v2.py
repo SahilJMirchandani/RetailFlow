@@ -93,104 +93,124 @@ def load_json(relative_path):
         return None
 
 
-def collect_metrics():
-    """Collect quality and row-count metrics from stage reports."""
+def collect_metrics(successful_stages=None):
+    """Collect metrics only for stages confirmed successful in this run.
+
+    When successful_stages is provided, reports from stages that did not
+    complete successfully are excluded. This prevents a failed run from
+    accidentally displaying quality reports left over from an older run.
+    Omitting the argument preserves the ability to inspect all existing
+    reports outside an orchestrated run.
+    """
+
+    successful = (
+        None if successful_stages is None else set(successful_stages)
+    )
+
+    def stage_succeeded(stage_name):
+        return successful is None or stage_name in successful
 
     metrics = {}
 
-    product_report = load_json(
-        "data/output/product_catalog_quality.json"
-    )
+    if stage_succeeded("Product Catalogue API Ingestion"):
+        product_report = load_json(
+            "data/output/product_catalog_quality.json"
+        )
 
-    if product_report:
-        metrics["product_catalog"] = {
-            "records": product_report.get("records_received"),
-            "categories": product_report.get("distinct_categories"),
-            "quality_passed": product_report.get("passed"),
-        }
+        if product_report:
+            metrics["product_catalog"] = {
+                "records": product_report.get("records_received"),
+                "categories": product_report.get("distinct_categories"),
+                "quality_passed": product_report.get("passed"),
+            }
 
-    bronze_report = load_json(
-        "data/output/olist_bronze_manifest.json"
-    )
+    if stage_succeeded("Olist Bronze Ingestion"):
+        bronze_report = load_json(
+            "data/output/olist_bronze_manifest.json"
+        )
 
-    if bronze_report:
-        tables = bronze_report.get("tables", [])
+        if bronze_report:
+            tables = bronze_report.get("tables", [])
 
-        metrics["olist_bronze"] = {
-            "tables_succeeded": bronze_report.get("tables_succeeded"),
-            "tables_failed": bronze_report.get("tables_failed"),
-            "total_rows": sum(
-                table.get("row_count", 0)
-                for table in tables
-            ),
-            "table_counts": {
-                table["source_file"]: table.get("row_count", 0)
-                for table in tables
-            },
-        }
+            metrics["olist_bronze"] = {
+                "tables_succeeded": bronze_report.get("tables_succeeded"),
+                "tables_failed": bronze_report.get("tables_failed"),
+                "total_rows": sum(
+                    table.get("row_count", 0)
+                    for table in tables
+                ),
+                "table_counts": {
+                    table["source_file"]: table.get("row_count", 0)
+                    for table in tables
+                },
+            }
 
-    silver_report = load_json(
-        "data/output/olist_silver_quality.json"
-    )
+    if stage_succeeded("Olist Silver Transformation"):
+        silver_report = load_json(
+            "data/output/olist_silver_quality.json"
+        )
 
-    if silver_report:
-        metrics["olist_silver"] = {
-            "quality_passed": silver_report.get("passed"),
-            "row_counts": silver_report.get("row_counts", {}),
-            "checks": silver_report.get("checks", {}),
-        }
+        if silver_report:
+            metrics["olist_silver"] = {
+                "quality_passed": silver_report.get("passed"),
+                "row_counts": silver_report.get("row_counts", {}),
+                "checks": silver_report.get("checks", {}),
+            }
 
-    gold_report = load_json(
-        "data/output/olist_gold_quality.json"
-    )
+    if stage_succeeded("Olist Gold Warehouse"):
+        gold_report = load_json(
+            "data/output/olist_gold_quality.json"
+        )
 
-    if gold_report:
-        metrics["olist_gold"] = {
-            "quality_passed": gold_report.get("passed"),
-            "row_counts": gold_report.get("row_counts", {}),
-            "checks": gold_report.get("checks", {}),
-            "reconciliation": gold_report.get(
-                "reconciliation", {}
-            ),
-        }
+        if gold_report:
+            metrics["olist_gold"] = {
+                "quality_passed": gold_report.get("passed"),
+                "row_counts": gold_report.get("row_counts", {}),
+                "checks": gold_report.get("checks", {}),
+                "reconciliation": gold_report.get(
+                    "reconciliation", {}
+                ),
+            }
 
-    manifest_path = (
-        OUTPUT_DIR / "product_images_manifest.csv"
-    )
+    if stage_succeeded("Product Image Ingestion"):
+        manifest_path = (
+            OUTPUT_DIR / "product_images_manifest.csv"
+        )
 
-    if manifest_path.is_file():
-        status_counts = Counter()
-        unique_urls = set()
-        local_image_count = 0
+        if manifest_path.is_file():
+            status_counts = Counter()
+            unique_urls = set()
+            local_image_count = 0
 
-        with manifest_path.open(
-            "r",
-            encoding="utf-8-sig",
-            newline="",
-        ) as file:
-            for row in csv.DictReader(file):
-                status_counts[row.get("download_status", "unknown")] += 1
+            with manifest_path.open(
+                "r",
+                encoding="utf-8-sig",
+                newline="",
+            ) as file:
+                for row in csv.DictReader(file):
+                    status_counts[
+                        row.get("download_status", "unknown")
+                    ] += 1
 
-                url = row.get("image_url")
-                if url:
-                    unique_urls.add(url)
+                    url = row.get("image_url")
+                    if url:
+                        unique_urls.add(url)
 
-                local_path = row.get("local_path", "")
-                if local_path:
-                    absolute_path = PROJECT_ROOT / Path(local_path)
+                    local_path = row.get("local_path", "")
+                    if local_path:
+                        absolute_path = PROJECT_ROOT / Path(local_path)
 
-                    if absolute_path.is_file():
-                        local_image_count += 1
+                        if absolute_path.is_file():
+                            local_image_count += 1
 
-        metrics["product_images"] = {
-            "associations": sum(status_counts.values()),
-            "unique_urls": len(unique_urls),
-            "local_files_available": local_image_count,
-            "download_status_counts": dict(status_counts),
-        }
+            metrics["product_images"] = {
+                "associations": sum(status_counts.values()),
+                "unique_urls": len(unique_urls),
+                "local_files_available": local_image_count,
+                "download_status_counts": dict(status_counts),
+            }
 
     return metrics
-
 
 def execute_stage(stage, log_file):
     """Run one component and stream its output to the terminal and log."""
@@ -376,7 +396,14 @@ def run_retailflow_v2():
             3,
         )
 
-        record["metrics"] = collect_metrics()
+        successful_stages = {
+            stage["name"]
+            for stage in record["stages"]
+            if stage.get("status") == "success"
+        }
+        record["metrics"] = collect_metrics(
+            successful_stages=successful_stages
+        )
 
         try:
             save_run_record(record)
