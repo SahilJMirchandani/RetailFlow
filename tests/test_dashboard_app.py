@@ -30,3 +30,14 @@ def test_every_dashboard_page_renders_without_script_exceptions():
             f"{page} raised an exception: "
             + "; ".join(item.message for item in app.exception)
         )
+
+
+
+def test_olist_monetary_displays_use_inr_and_document_conversion():
+    source = APP_PATH.read_text(encoding="utf-8")
+
+    assert 'Product Revenue (INR)' in source
+    assert 'Payment Value (INR)' in source
+    assert 'BRL_TO_INR_RATE' in source
+    assert 'show_brl_inr_note()' in source
+    assert 'R$' not in source
