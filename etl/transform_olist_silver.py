@@ -1,6 +1,9 @@
 
 import json
+import shutil
 import sys
+import tempfile
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -266,6 +269,49 @@ def check_foreign_key(con, child, child_key, parent, parent_key):
     }
 
 
+def write_silver_parquet(con, view, output_path):
+    """Write one Silver view to a staging Parquet file."""
+
+    con.execute(
+        f"COPY (SELECT * FROM {view}) "
+        f"TO '{sql_path(output_path)}' "
+        f"(FORMAT PARQUET, COMPRESSION ZSTD)"
+    )
+
+
+def publish_staged_directory(staging_dir, target_dir):
+    """Publish a validated Silver layer, restoring the old one on failure."""
+
+    backup_dir = target_dir.with_name(
+        f".{target_dir.name}.backup-{uuid.uuid4().hex}"
+    )
+    moved_previous_layer = False
+
+    if target_dir.exists():
+        target_dir.replace(backup_dir)
+        moved_previous_layer = True
+
+    try:
+        staging_dir.replace(target_dir)
+    except Exception:
+        if (
+            moved_previous_layer
+            and backup_dir.exists()
+            and not target_dir.exists()
+        ):
+            backup_dir.replace(target_dir)
+        raise
+
+    if moved_previous_layer and backup_dir.exists():
+        try:
+            shutil.rmtree(backup_dir)
+        except OSError as error:
+            print(
+                "WARNING: New Silver layer published, but old backup "
+                f"could not be removed: {backup_dir} ({error})"
+            )
+
+
 def transform_olist_silver():
     """Build typed Silver tables and generate a quality report."""
 
@@ -273,13 +319,21 @@ def transform_olist_silver():
     print("RetailFlow 2.0 - Olist Silver Transformation")
     print("=" * 70)
 
-    SILVER_DIR.mkdir(parents=True, exist_ok=True)
+    SILVER_DIR.parent.mkdir(parents=True, exist_ok=True)
     REPORT_FILE.parent.mkdir(parents=True, exist_ok=True)
 
     processed_at = datetime.now(timezone.utc).isoformat()
     con = duckdb.connect(database=":memory:")
+    staging_dir = None
 
     try:
+        staging_dir = Path(
+            tempfile.mkdtemp(
+                prefix=f".{SILVER_DIR.name}.staging-",
+                dir=str(SILVER_DIR.parent),
+            )
+        )
+
         build_silver_views(con, processed_at)
 
         row_counts = {}
@@ -289,15 +343,12 @@ def transform_olist_silver():
 
         for name in TABLE_FILES:
             view = f"silver_{name}"
-            output = SILVER_DIR / f"{name}.parquet"
+            staged_output = staging_dir / f"{name}.parquet"
+            published_output = SILVER_DIR / f"{name}.parquet"
 
-            output.unlink(missing_ok=True)
-
-            con.execute(
-                f"COPY (SELECT * FROM {view}) "
-                f"TO '{sql_path(output)}' "
-                f"(FORMAT PARQUET, COMPRESSION ZSTD)"
-            )
+            # Stage the full layer separately. The live Silver directory
+            # remains unchanged until all blocking quality checks pass.
+            write_silver_parquet(con, view, staged_output)
 
             row_counts[name] = scalar(
                 con,
@@ -305,10 +356,10 @@ def transform_olist_silver():
             )
 
             output_files[name] = {
-                "path": output.relative_to(
+                "path": published_output.relative_to(
                     PROJECT_ROOT
                 ).as_posix(),
-                "size_bytes": output.stat().st_size,
+                "size_bytes": staged_output.stat().st_size,
             }
 
             print(
@@ -480,11 +531,6 @@ def transform_olist_silver():
             "passed": all(checks.values()),
         }
 
-        REPORT_FILE.write_text(
-            json.dumps(report, indent=2),
-            encoding="utf-8",
-        )
-
         print("\nDATA QUALITY SUMMARY")
         print("-" * 50)
 
@@ -496,24 +542,56 @@ def transform_olist_silver():
             unmapped_categories,
         )
 
-        print(f"\nQuality report: {REPORT_FILE}")
-
         if not report["passed"]:
-            print(
-                "\nSilver transformation completed, but one or more "
-                "quality checks failed."
+            # A failed-quality output stays in staging and is discarded.
+            # Preserve the previously published Silver directory.
+            report["published"] = False
+            report["publish_status"] = "rejected_quality_checks"
+            REPORT_FILE.write_text(
+                json.dumps(report, indent=2),
+                encoding="utf-8",
             )
+            print(f"\nQuality report: {REPORT_FILE}")
             print(
-                "Review olist_silver_quality.json before using "
-                "these outputs downstream."
+                "\nSilver validation failed. The previous published "
+                "Silver layer was not changed."
             )
             return False
 
-        print("\nAll Silver quality checks passed.")
+        try:
+            publish_staged_directory(staging_dir, SILVER_DIR)
+        except Exception as error:
+            report["published"] = False
+            report["publish_status"] = "failed"
+            report["publish_error"] = str(error)
+            REPORT_FILE.write_text(
+                json.dumps(report, indent=2),
+                encoding="utf-8",
+            )
+            print(f"\nQuality report: {REPORT_FILE}")
+            raise
+
+        report["published"] = True
+        report["publish_status"] = "published"
+        report["published_at_utc"] = datetime.now(
+            timezone.utc
+        ).isoformat()
+        REPORT_FILE.write_text(
+            json.dumps(report, indent=2),
+            encoding="utf-8",
+        )
+
+        print(f"\nQuality report: {REPORT_FILE}")
+        print(
+            "\nAll Silver quality checks passed; "
+            "the complete layer was published."
+        )
         return True
 
     finally:
         con.close()
+        if staging_dir is not None and staging_dir.exists():
+            shutil.rmtree(staging_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":
