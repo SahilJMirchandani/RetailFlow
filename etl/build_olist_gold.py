@@ -421,14 +421,26 @@ def build_olist_gold():
 
         for view in gold_views:
             parquet_file = GOLD_DIR / f"{view}.parquet"
-
-            con.execute(
-                f"""
-                COPY (SELECT * FROM {view})
-                TO '{sql_path(parquet_file)}'
-                (FORMAT PARQUET, COMPRESSION ZSTD)
-                """
+            temporary_parquet_file = parquet_file.with_suffix(
+                ".parquet.tmp"
             )
+            temporary_parquet_file.unlink(missing_ok=True)
+
+            try:
+                # Write to a temporary file first, then atomically replace
+                # the published output. A failed rerun preserves the last
+                # complete Gold table instead of truncating/partially
+                # rewriting it.
+                con.execute(
+                    f"""
+                    COPY (SELECT * FROM {view})
+                    TO '{sql_path(temporary_parquet_file)}'
+                    (FORMAT PARQUET, COMPRESSION ZSTD)
+                    """
+                )
+                temporary_parquet_file.replace(parquet_file)
+            finally:
+                temporary_parquet_file.unlink(missing_ok=True)
 
             row_counts[view] = count_rows(con, view)
 
@@ -442,14 +454,20 @@ def build_olist_gold():
             # Export the smaller business aggregates as CSV as well.
             if view.startswith("gold_"):
                 csv_file = GOLD_DIR / f"{view}.csv"
+                temporary_csv_file = csv_file.with_suffix(".csv.tmp")
+                temporary_csv_file.unlink(missing_ok=True)
 
-                con.execute(
-                    f"""
-                    COPY (SELECT * FROM {view})
-                    TO '{sql_path(csv_file)}'
-                    (HEADER, DELIMITER ',')
-                    """
-                )
+                try:
+                    con.execute(
+                        f"""
+                        COPY (SELECT * FROM {view})
+                        TO '{sql_path(temporary_csv_file)}'
+                        (HEADER, DELIMITER ',')
+                        """
+                    )
+                    temporary_csv_file.replace(csv_file)
+                finally:
+                    temporary_csv_file.unlink(missing_ok=True)
 
                 output_files[f"{view}_csv"] = {
                     "path": csv_file.relative_to(
