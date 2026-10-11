@@ -6,6 +6,8 @@ Converted values are never written back to the source datasets.
 """
 
 from math import isfinite
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+
 
 # DummyJSON sample product price -> INR. FBIL reference rate as published
 # on NSE India for 8 October 2026.
@@ -48,3 +50,22 @@ def convert_brl_to_inr(value):
     """Convert a finite numeric Brazilian-real amount to INR for display."""
 
     return _convert_to_inr(value, BRL_TO_INR_RATE)
+
+
+
+def format_brl_as_inr(value):
+    """Format a source BRL amount as INR using decimal half-up rounding."""
+
+    try:
+        amount = Decimal(str(value if value is not None else 0))
+    except (InvalidOperation, ValueError, TypeError):
+        amount = Decimal("0")
+
+    if not amount.is_finite():
+        amount = Decimal("0")
+
+    converted = (
+        amount * Decimal(str(BRL_TO_INR_RATE))
+    ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    return f"₹{converted:,.2f}"
