@@ -236,7 +236,7 @@ GitHub Actions runs Python compilation and the test suite on pushes to the main 
 - Do not commit `.env`, passwords, access tokens, or database credentials.
 - Input datasets and generated Bronze/Silver/Gold Parquet, CSV outputs, logs, reports, and product images are intentionally ignored by Git.
 - The DummyJSON catalogue is a sample API, not a canonical retail inventory.
-- USD→INR product prices, if displayed, use a documented fixed reference rate for presentation; they are not financial quotes and are not persisted back to source data.
+- The Product Gallery converts sample USD prices to INR for display only using the fixed FBIL reference rate **₹96.7733 per US$1 (8 October 2026)**. The dashboard links to the [NSE India reference-rate page](https://www.nseindia.com/report-detail/rbi-reference-rate-statistics). The rate is not live and is not written back to source data.
 - Do not compare or combine revenue across the UK-retailer and Brazilian-marketplace tracks without explicitly accounting for their different currencies and datasets.
 
 ## 9. Technology stack
