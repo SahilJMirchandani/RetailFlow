@@ -10,6 +10,7 @@ from dashboard.currency import (
     USD_TO_INR_RATE,
     convert_brl_to_inr,
     convert_usd_to_inr,
+    format_brl_as_inr,
 )
 
 
@@ -33,3 +34,9 @@ def test_brl_to_inr_uses_documented_fixed_rate():
 @pytest.mark.parametrize("value", [None, "invalid", float("nan"), math.inf])
 def test_invalid_brl_price_returns_none(value):
     assert convert_brl_to_inr(value) is None
+
+
+
+def test_brl_to_inr_currency_format_rounds_half_up_to_paise():
+    assert format_brl_as_inr(13_591_643.70) == "₹262,998,305.60"
+    assert format_brl_as_inr(None) == "₹0.00"
