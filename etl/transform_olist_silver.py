@@ -325,6 +325,8 @@ def transform_olist_silver():
     processed_at = datetime.now(timezone.utc).isoformat()
     con = duckdb.connect(database=":memory:")
     staging_dir = None
+    report = None
+    layer_published = False
 
     try:
         staging_dir = Path(
@@ -560,6 +562,7 @@ def transform_olist_silver():
 
         try:
             publish_staged_directory(staging_dir, SILVER_DIR)
+            layer_published = True
         except Exception as error:
             report["published"] = False
             report["publish_status"] = "failed"
@@ -587,6 +590,43 @@ def transform_olist_silver():
             "the complete layer was published."
         )
         return True
+
+    except Exception as error:
+        # Replace stale success metadata with the status of this attempt.
+        # A failed staging write must never make an older quality report look
+        # like the current run succeeded.
+        if report is None:
+            report = {
+                "project": "RetailFlow",
+                "dataset": "Olist Brazilian E-Commerce",
+                "processed_at_utc": processed_at,
+                "silver_directory": SILVER_DIR.relative_to(
+                    PROJECT_ROOT
+                ).as_posix(),
+                "checks": {},
+                "passed": False,
+            }
+
+        report["published"] = layer_published
+        if layer_published:
+            report["publish_status"] = "published_report_write_failed"
+            report["report_error"] = str(error)
+        else:
+            report.setdefault(
+                "publish_status", "failed_before_publish"
+            )
+            report["publish_error"] = str(error)
+        try:
+            REPORT_FILE.write_text(
+                json.dumps(report, indent=2),
+                encoding="utf-8",
+            )
+        except OSError as report_error:
+            print(
+                "WARNING: Could not update Silver failure report: "
+                f"{report_error}"
+            )
+        raise
 
     finally:
         con.close()
