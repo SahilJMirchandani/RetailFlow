@@ -444,6 +444,107 @@ if page == "Platform Overview":
 
     st.divider()
 
+    st.markdown("### Pipeline Execution Flow")
+    st.caption(
+        "Latest recorded RetailFlow 2.0 run. Each stage shows its actual "
+        "execution status and duration from the orchestrator record."
+    )
+
+    pipeline_stage_order = [
+        ("Catalogue API", "Product Catalogue API Ingestion"),
+        ("Product Images", "Product Image Ingestion"),
+        ("Olist Bronze", "Olist Bronze Ingestion"),
+        ("Olist Silver", "Olist Silver Transformation"),
+        ("Olist Gold", "Olist Gold Warehouse"),
+    ]
+
+    recorded_stages = {
+        str(stage.get("name")): stage
+        for stage in pipeline_run.get("stages", [])
+        if isinstance(stage, dict) and stage.get("name")
+    } if pipeline_run else {}
+
+    pipeline_columns = st.columns(len(pipeline_stage_order), gap="small")
+    successful_stage_count = 0
+
+    for stage_index, (short_name, full_name) in enumerate(
+        pipeline_stage_order
+    ):
+        stage_result = recorded_stages.get(full_name)
+
+        with pipeline_columns[stage_index]:
+            with st.container(border=True):
+                st.caption(f"STAGE {stage_index + 1}")
+                st.markdown(f"**{short_name}**")
+
+                if stage_result is None:
+                    st.caption("NOT RUN")
+                    duration_label = "Not recorded"
+                else:
+                    stage_status = str(
+                        stage_result.get("status", "unknown")
+                    ).strip().lower()
+
+                    if stage_status == "success":
+                        st.success("SUCCESS", icon="✅")
+                        successful_stage_count += 1
+                    elif stage_status == "failed":
+                        st.error("FAILED", icon="❌")
+                    elif stage_status == "running":
+                        st.info("RUNNING", icon="⏳")
+                    elif stage_status == "interrupted":
+                        st.warning("INTERRUPTED", icon="⚠️")
+                    elif stage_status in {"skipped", "not_run", "pending"}:
+                        st.caption("NOT RUN")
+                    else:
+                        st.info(stage_status.upper())
+
+                    duration_value = stage_result.get("duration_seconds")
+                    try:
+                        duration_label = (
+                            f"{float(duration_value):.2f} sec"
+                            if duration_value is not None
+                            else "Not recorded"
+                        )
+                    except (TypeError, ValueError):
+                        duration_label = "Not recorded"
+
+                    exit_code = stage_result.get("exit_code")
+                    if exit_code is not None:
+                        st.caption(f"Exit code: {exit_code}")
+
+                st.caption("Execution time")
+                st.markdown(f"**{duration_label}**")
+
+    if pipeline_run:
+        total_duration = pipeline_run.get("duration_seconds")
+        try:
+            total_duration_label = (
+                f"{float(total_duration):.2f} sec"
+                if total_duration is not None
+                else "Not recorded"
+            )
+        except (TypeError, ValueError):
+            total_duration_label = "Not recorded"
+
+        overall_status = str(
+            pipeline_run.get("status", "unknown")
+        ).upper()
+
+        st.caption(
+            f"Latest run: {successful_stage_count}/"
+            f"{len(pipeline_stage_order)} stages successful"
+            f"  •  Overall status: {overall_status}"
+            f"  •  Total execution time: {total_duration_label}"
+        )
+    else:
+        st.info(
+            "No pipeline execution has been recorded yet. "
+            "Run pipeline/run_retailflow_v2.py to populate this flow."
+        )
+
+    st.divider()
+
     st.markdown("### Marketplace Performance")
 
     left, right = st.columns(2)
