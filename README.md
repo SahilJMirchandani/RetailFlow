@@ -67,7 +67,7 @@ The orchestrator runs five stages in order:
 
 A stage failure stops the sequence. The V2 workflow writes timestamped logs and a latest-run record plus append-only JSONL history to `data/output/`.
 
-**Important:** DummyJSON's sample product IDs and Olist product IDs belong to different sources. RetailFlow does not treat them as matching keys. Olist source data and ETL quality reports remain in Brazilian reais (BRL), while Olist monetary values on the V2 dashboard and analytics pages are converted to Indian rupees (INR) for display only using a fixed historical reference rate. The original Online Retail track remains in pounds (£). Neither conversion rewrites the stored source data.
+**Important:** DummyJSON's sample product IDs and Olist product IDs belong to different sources. RetailFlow does not treat them as matching keys. Olist source data and ETL quality reports remain in Brazilian reais (BRL); the Olist dashboard converts monetary values to INR for display only at **₹17.4612 per R$1 (2 November 2026)**. The Product Gallery separately converts sample USD prices to INR at the documented fixed rate. The original Online Retail track remains in pounds (£). Display conversions never rewrite stored source data.
 
 ## 2. V2 data model
 
@@ -239,7 +239,7 @@ GitHub Actions runs Python compilation and the test suite on pushes to the main 
 - Input datasets and generated Bronze/Silver/Gold Parquet, CSV outputs, logs, reports, and product images are intentionally ignored by Git.
 - The DummyJSON catalogue is a sample API, not a canonical retail inventory.
 - The Product Gallery converts sample USD prices to INR for display only using the fixed FBIL reference rate **₹96.7733 per US$1 (8 October 2026)**. The dashboard links to the [NSE India reference-rate page](https://www.nseindia.com/report-detail/rbi-reference-rate-statistics). The rate is not live and is not written back to source data.
-- Olist dashboard and analytics monetary values are converted from BRL to INR at the fixed market close **₹19.3500 per R$1 (9 October 2026)**. See [Exchange Rates UK historical BRL/INR data](https://www.exchangerates.org.uk/BRL-INR-exchange-rate-history.html). It is a dated display rate, not a live quote; raw Olist data and generated data-quality reports remain in BRL.
+- Olist dashboard and analytics monetary values are converted from BRL to INR at the pinned historical rate **₹17.4612 per R$1 (2 November 2026)**. See [Mataf historical BRL/INR data](https://www.mataf.net/en/currency/converter-BRL-INR/data). This is a dated display rate, not a live quote; raw Olist datasets and generated quality reports remain in BRL.
 - Do not compare or combine revenue across the UK-retailer and Brazilian-marketplace tracks without explicitly accounting for their different currencies and datasets.
 
 ## 9. Technology stack
