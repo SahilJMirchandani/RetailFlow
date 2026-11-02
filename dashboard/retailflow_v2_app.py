@@ -369,45 +369,157 @@ if page == "Platform Overview":
 
     st.divider()
 
-    st.markdown("### Platform Architecture")
+    st.markdown("### End-to-End Data Pipeline Architecture")
+    st.caption(
+        "RetailFlow 2.0 contains two separate data paths coordinated by "
+        "the batch orchestrator: the product catalogue and image path, "
+        "and the Olist marketplace warehouse path."
+    )
 
-    architecture = [
+    st.markdown("#### Product Catalogue and Image Path")
+
+    product_flow = [
         (
-            "Sources",
-            "Online Retail, Olist relational tables, product API",
+            "SOURCE",
+            "DummyJSON Products API",
+            "Paginated product records retrieved through HTTPS GET requests.",
+            "External API",
         ),
         (
-            "Bronze",
-            "Raw JSON snapshots and source tables in Parquet",
+            "INGESTION",
+            "Catalogue API Ingestion",
+            "Raw response pages are preserved; product records are normalized and validated.",
+            "data/bronze/dummyjson/",
         ),
         (
-            "Silver",
-            "Typed, standardized data with quality checks",
+            "CATALOGUE",
+            "Silver Product Catalogue",
+            "Typed product records and a catalogue quality report are published.",
+            "data/silver/products/",
         ),
         (
-            "Gold",
-            "Facts, dimensions, and business aggregates",
-        ),
-        (
-            "Monitoring",
-            "Run history, stage logs, data quality, reconciliation",
+            "IMAGE ASSETS",
+            "Product Image Ingestion",
+            "Product images are downloaded locally and tracked in a manifest.",
+            "data/catalog_images/dummyjson/",
         ),
     ]
 
-    for index in range(0, len(architecture), 2):
-        columns = st.columns(2)
+    product_columns = st.columns(
+        [2.2, 0.38, 2.2, 0.38, 2.2, 0.38, 2.2],
+        gap="small",
+    )
 
-        for offset, column in enumerate(columns):
-            item_index = index + offset
+    for index, item in enumerate(product_flow):
+        card_column = product_columns[index * 2]
+        label, title, description, output_path = item
 
-            if item_index >= len(architecture):
-                continue
-
-            title, description = architecture[item_index]
-
-            with column:
+        with card_column:
+            with st.container(border=True):
+                st.caption(label)
                 st.markdown(f"**{title}**")
                 st.write(description)
+                st.caption(f"Output: `{output_path}`")
+
+        if index < len(product_flow) - 1:
+            with product_columns[index * 2 + 1]:
+                st.markdown("→")
+
+    st.markdown("#### Olist Marketplace Warehouse Path")
+
+    olist_flow = [
+        (
+            "SOURCE",
+            "Olist CSV Tables",
+            "Nine historical marketplace source tables are read from the raw data folder.",
+            "data/raw/olist/*.csv",
+        ),
+        (
+            "BRONZE",
+            "Raw Parquet Layer",
+            "Source fields are preserved while CSV data is ingested in chunks.",
+            "data/bronze/olist/",
+        ),
+        (
+            "SILVER",
+            "Curated Parquet Layer",
+            "DuckDB applies type casting, standardization and data-quality checks.",
+            "data/silver/olist/",
+        ),
+        (
+            "GOLD",
+            "Analytical Warehouse",
+            "Dimensions, fact tables and daily, category and seller aggregates are built.",
+            "data/gold/olist/",
+        ),
+        (
+            "CONSUMPTION",
+            "Streamlit Dashboard",
+            "The overview and Olist Analytics pages read the published Gold outputs.",
+            "Platform Overview / Olist Analytics",
+        ),
+    ]
+
+    olist_columns = st.columns(
+        [2, 0.38, 2, 0.38, 2, 0.38, 2, 0.38, 2],
+        gap="small",
+    )
+
+    for index, item in enumerate(olist_flow):
+        card_column = olist_columns[index * 2]
+        label, title, description, output_path = item
+
+        with card_column:
+            with st.container(border=True):
+                st.caption(label)
+                st.markdown(f"**{title}**")
+                st.write(description)
+                st.caption(f"Output: `{output_path}`")
+
+        if index < len(olist_flow) - 1:
+            with olist_columns[index * 2 + 1]:
+                st.markdown("→")
+
+    st.markdown("#### Orchestration, Quality and Lineage")
+
+    monitoring_columns = st.columns(3, gap="medium")
+    monitoring_cards = [
+        (
+            "ORCHESTRATION",
+            "Five-stage batch runner",
+            "Catalogue ingestion, image ingestion, Olist Bronze, Olist Silver and Olist Gold run in order. A failed stage stops the sequence.",
+            "pipeline/run_retailflow_v2.py",
+        ),
+        (
+            "QUALITY REPORTS",
+            "Validation and reconciliation",
+            "Catalogue, Bronze, Silver and Gold manifests and reports capture schema, row-count, key and revenue checks.",
+            "data/output/ (quality reports and manifests)",
+        ),
+        (
+            "OBSERVABILITY",
+            "Run history and logs",
+            "The dashboard reads the latest run record, append-only run history and timestamped stage logs.",
+            "data/output/lineage/",
+        ),
+    ]
+
+    for column, item in zip(monitoring_columns, monitoring_cards):
+        label, title, description, output_path = item
+
+        with column:
+            with st.container(border=True):
+                st.caption(label)
+                st.markdown(f"**{title}**")
+                st.write(description)
+                st.caption(f"Location: `{output_path}`")
+
+    st.caption(
+        "The DummyJSON catalogue and Olist marketplace data are separate "
+        "sources. Their product identifiers are not joined. The Online Retail "
+        "workbook workflow is a separate Track A path and is not part of "
+        "this RetailFlow 2.0 architecture."
+    )
 
     st.divider()
 
