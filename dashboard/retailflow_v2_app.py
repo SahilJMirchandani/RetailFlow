@@ -7,10 +7,15 @@ import plotly.express as px
 import streamlit as st
 
 from dashboard.currency import (
+    BRL_TO_INR_RATE,
+    BRL_TO_INR_RATE_AS_OF,
+    BRL_TO_INR_SOURCE_URL,
     USD_TO_INR_RATE,
     USD_TO_INR_RATE_AS_OF,
     USD_TO_INR_SOURCE_URL,
+    convert_brl_to_inr,
     convert_usd_to_inr,
+    format_brl_as_inr,
 )
 
 
@@ -113,8 +118,35 @@ def load_catalog():
     return products, manifest
 
 
-def format_currency(value, currency="R$"):
-    return f"{currency} {float(value or 0):,.2f}"
+def format_currency(value):
+    """Format a source BRL amount as INR for dashboard display only."""
+
+    return format_brl_as_inr(value)
+
+
+def convert_brl_columns(dataframe, columns):
+    """Return a copy with selected BRL columns converted to INR for display."""
+
+    result = dataframe.copy()
+    for column in columns:
+        if column in result.columns:
+            numeric_values = pd.to_numeric(
+                result[column], errors="coerce"
+            )
+            result[column] = numeric_values.map(convert_brl_to_inr)
+    return result
+
+
+def show_brl_inr_note():
+    """Document the fixed rate applied to displayed Olist monetary values."""
+
+    st.caption(
+        f"Olist monetary values are converted for display only at "
+        f"1 BRL = ₹{BRL_TO_INR_RATE:,.4f} "
+        f"(historical rate, {BRL_TO_INR_RATE_AS_OF}). "
+        f"Stored source data is unchanged. "
+        f"[Rate source]({BRL_TO_INR_SOURCE_URL})"
+    )
 
 
 def get_thumbnail_map(manifest):
@@ -320,6 +352,7 @@ if page == "Platform Overview":
         "assets, marketplace analytics, data-quality checks, and "
         "pipeline execution history."
     )
+    show_brl_inr_note()
 
     order_count = len(fact_orders)
     item_count = len(fact_items)
@@ -371,9 +404,9 @@ if page == "Platform Overview":
 
     st.markdown("### End-to-End Data Pipeline Architecture")
     st.caption(
-        "RetailFlow 2.0 contains two separate data paths coordinated by "
-        "the batch orchestrator: the product catalogue and image path, "
-        "and the Olist marketplace warehouse path."
+        "RetailFlow 2.0 contains two connected-by-orchestration data paths: "
+        "the product catalogue and image path, and the Olist marketplace "
+        "warehouse path. Both are batch workflows executed locally."
     )
 
     st.markdown("#### Product Catalogue and Image Path")
@@ -478,7 +511,7 @@ if page == "Platform Overview":
 
         if index < len(olist_flow) - 1:
             with olist_columns[index * 2 + 1]:
-                st.markdown("→")
+                st.markdown("### →")
 
     st.markdown("#### Orchestration, Quality and Lineage")
 
@@ -487,14 +520,14 @@ if page == "Platform Overview":
         (
             "ORCHESTRATION",
             "Five-stage batch runner",
-            "Catalogue ingestion, image ingestion, Olist Bronze, Olist Silver and Olist Gold run in order. A failed stage stops the sequence.",
+            "The RetailFlow 2.0 orchestrator runs catalogue ingestion, image ingestion, Olist Bronze, Olist Silver and Olist Gold in order. A failed stage stops the sequence.",
             "pipeline/run_retailflow_v2.py",
         ),
         (
             "QUALITY REPORTS",
             "Validation and reconciliation",
-            "Catalogue, Bronze, Silver and Gold manifests and reports capture schema, row-count, key and revenue checks.",
-            "data/output/ (quality reports and manifests)",
+            "Catalogue, Bronze, Silver and Gold manifests and quality reports capture schema, row-count, key and revenue checks.",
+            "data/output/*quality.json",
         ),
         (
             "OBSERVABILITY",
@@ -517,9 +550,110 @@ if page == "Platform Overview":
     st.caption(
         "The DummyJSON catalogue and Olist marketplace data are separate "
         "sources. Their product identifiers are not joined. The Online Retail "
-        "workbook workflow is a separate Track A path and is not part of "
-        "this RetailFlow 2.0 architecture."
+        "workbook workflow is a separate Track A project path and is not part "
+        "of this RetailFlow 2.0 architecture."
     )
+
+    st.divider()
+
+    st.markdown("### Pipeline Execution Flow")
+    st.caption(
+        "Latest recorded RetailFlow 2.0 run. Each stage shows its actual "
+        "execution status and duration from the orchestrator record."
+    )
+
+    pipeline_stage_order = [
+        ("Catalogue API", "Product Catalogue API Ingestion"),
+        ("Product Images", "Product Image Ingestion"),
+        ("Olist Bronze", "Olist Bronze Ingestion"),
+        ("Olist Silver", "Olist Silver Transformation"),
+        ("Olist Gold", "Olist Gold Warehouse"),
+    ]
+
+    recorded_stages = {
+        str(stage.get("name")): stage
+        for stage in pipeline_run.get("stages", [])
+        if isinstance(stage, dict) and stage.get("name")
+    } if pipeline_run else {}
+
+    pipeline_columns = st.columns(len(pipeline_stage_order), gap="small")
+    successful_stage_count = 0
+
+    for stage_index, (short_name, full_name) in enumerate(
+        pipeline_stage_order
+    ):
+        stage_result = recorded_stages.get(full_name)
+
+        with pipeline_columns[stage_index]:
+            with st.container(border=True):
+                st.caption(f"STAGE {stage_index + 1}")
+                st.markdown(f"**{short_name}**")
+
+                if stage_result is None:
+                    st.caption("NOT RUN")
+                    duration_label = "Not recorded"
+                else:
+                    stage_status = str(
+                        stage_result.get("status", "unknown")
+                    ).strip().lower()
+
+                    if stage_status == "success":
+                        st.success("SUCCESS", icon="✅")
+                        successful_stage_count += 1
+                    elif stage_status == "failed":
+                        st.error("FAILED", icon="❌")
+                    elif stage_status == "running":
+                        st.info("RUNNING", icon="⏳")
+                    elif stage_status == "interrupted":
+                        st.warning("INTERRUPTED", icon="⚠️")
+                    elif stage_status in {"skipped", "not_run", "pending"}:
+                        st.caption("NOT RUN")
+                    else:
+                        st.info(stage_status.upper())
+
+                    duration_value = stage_result.get("duration_seconds")
+                    try:
+                        duration_label = (
+                            f"{float(duration_value):.2f} sec"
+                            if duration_value is not None
+                            else "Not recorded"
+                        )
+                    except (TypeError, ValueError):
+                        duration_label = "Not recorded"
+
+                    exit_code = stage_result.get("exit_code")
+                    if exit_code is not None:
+                        st.caption(f"Exit code: {exit_code}")
+
+                st.caption("Execution time")
+                st.markdown(f"**{duration_label}**")
+
+    if pipeline_run:
+        total_duration = pipeline_run.get("duration_seconds")
+        try:
+            total_duration_label = (
+                f"{float(total_duration):.2f} sec"
+                if total_duration is not None
+                else "Not recorded"
+            )
+        except (TypeError, ValueError):
+            total_duration_label = "Not recorded"
+
+        overall_status = str(
+            pipeline_run.get("status", "unknown")
+        ).upper()
+
+        st.caption(
+            f"Latest run: {successful_stage_count}/"
+            f"{len(pipeline_stage_order)} stages successful"
+            f"  •  Overall status: {overall_status}"
+            f"  •  Total execution time: {total_duration_label}"
+        )
+    else:
+        st.info(
+            "No pipeline execution has been recorded yet. "
+            "Run pipeline/run_retailflow_v2.py to populate this flow."
+        )
 
     st.divider()
 
@@ -537,6 +671,9 @@ if page == "Platform Overview":
             )
 
             chart_data = chart_data.sort_values("order_date")
+            chart_data = convert_brl_columns(
+                chart_data, ["product_revenue"]
+            )
 
             fig = px.line(
                 chart_data,
@@ -545,8 +682,15 @@ if page == "Platform Overview":
                 title="Olist Product Revenue Over Time",
                 labels={
                     "order_date": "Order Date",
-                    "product_revenue": "Product Revenue (R$)",
+                    "product_revenue": "Product Revenue (INR)",
                 },
+            )
+            fig.update_yaxes(tickprefix="₹")
+            fig.update_traces(
+                hovertemplate=(
+                    "%{x|%Y-%m-%d}<br>Product Revenue: ₹%{y:,.2f}"
+                    "<extra></extra>"
+                )
             )
 
             st.plotly_chart(fig, use_container_width=True)
@@ -560,6 +704,9 @@ if page == "Platform Overview":
             chart_data = category_sales.nlargest(
                 12, "product_revenue"
             ).sort_values("product_revenue")
+            chart_data = convert_brl_columns(
+                chart_data, ["product_revenue"]
+            )
 
             fig = px.bar(
                 chart_data,
@@ -568,9 +715,16 @@ if page == "Platform Overview":
                 orientation="h",
                 title="Leading Categories",
                 labels={
-                    "product_revenue": "Product Revenue (R$)",
+                    "product_revenue": "Product Revenue (INR)",
                     "product_category": "Category",
                 },
+            )
+            fig.update_xaxes(tickprefix="₹")
+            fig.update_traces(
+                hovertemplate=(
+                    "Category: %{y}<br>Product Revenue: ₹%{x:,.2f}"
+                    "<extra></extra>"
+                )
             )
 
             st.plotly_chart(fig, use_container_width=True)
@@ -799,9 +953,9 @@ elif page == "Olist Analytics":
     st.title("Olist Marketplace Analytics")
 
     st.caption(
-        "Metrics in this section use the Olist Brazilian "
-        "e-commerce dataset. Currency is displayed in Brazilian reais (R$)."
+        "Metrics in this section use the Olist Brazilian e-commerce dataset."
     )
+    show_brl_inr_note()
 
     if fact_orders.empty or fact_items.empty:
         st.warning(
@@ -823,6 +977,9 @@ elif page == "Olist Analytics":
     daily = daily_sales.copy()
     daily["order_date"] = pd.to_datetime(
         daily["order_date"], errors="coerce"
+    )
+    daily = convert_brl_columns(
+        daily, ["product_revenue", "freight_total", "payment_total"]
     )
 
     min_date = daily["order_date"].min().date()
@@ -940,6 +1097,9 @@ elif page == "Olist Analytics":
             top_categories = category_sales.nlargest(
                 15, "product_revenue"
             ).sort_values("product_revenue")
+            top_categories = convert_brl_columns(
+                top_categories, ["product_revenue"]
+            )
 
             fig = px.bar(
                 top_categories,
@@ -947,9 +1107,16 @@ elif page == "Olist Analytics":
                 y="product_category",
                 orientation="h",
                 labels={
-                    "product_revenue": "Product Revenue (R$)",
+                    "product_revenue": "Product Revenue (INR)",
                     "product_category": "Category",
                 },
+            )
+            fig.update_xaxes(tickprefix="₹")
+            fig.update_traces(
+                hovertemplate=(
+                    "Category: %{y}<br>Product Revenue: ₹%{x:,.2f}"
+                    "<extra></extra>"
+                )
             )
 
             st.plotly_chart(fig, use_container_width=True)
@@ -969,15 +1136,26 @@ elif page == "Olist Analytics":
                 + top_sellers["seller_city"].fillna("Unknown")
             )
 
+            top_sellers = convert_brl_columns(
+                top_sellers, ["product_revenue"]
+            )
+
             fig = px.bar(
                 top_sellers,
                 x="product_revenue",
                 y="seller_label",
                 orientation="h",
                 labels={
-                    "product_revenue": "Product Revenue (R$)",
+                    "product_revenue": "Product Revenue (INR)",
                     "seller_label": "Seller",
                 },
+            )
+            fig.update_xaxes(tickprefix="₹")
+            fig.update_traces(
+                hovertemplate=(
+                    "Seller: %{y}<br>Product Revenue: ₹%{x:,.2f}"
+                    "<extra></extra>"
+                )
             )
 
             st.plotly_chart(fig, use_container_width=True)
@@ -993,8 +1171,10 @@ elif page == "Olist Analytics":
                 payment_records=("order_id", "count"),
                 payment_value=("payment_value", "sum"),
             )
-            .sort_values("payment_value", ascending=False)
         )
+        payment_summary = convert_brl_columns(
+            payment_summary, ["payment_value"]
+        ).sort_values("payment_value", ascending=False)
 
         fig = px.bar(
             payment_summary,
@@ -1002,8 +1182,15 @@ elif page == "Olist Analytics":
             y="payment_value",
             labels={
                 "payment_type": "Payment Method",
-                "payment_value": "Payment Value (R$)",
+                "payment_value": "Payment Value (INR)",
             },
+        )
+        fig.update_yaxes(tickprefix="₹")
+        fig.update_traces(
+            hovertemplate=(
+                "Payment Method: %{x}<br>Payment Value: ₹%{y:,.2f}"
+                "<extra></extra>"
+            )
         )
 
         st.plotly_chart(fig, use_container_width=True)
@@ -1011,6 +1198,12 @@ elif page == "Olist Analytics":
             payment_summary,
             use_container_width=True,
             hide_index=True,
+            column_config={
+                "payment_value": st.column_config.NumberColumn(
+                    "Payment Value (INR)",
+                    format="₹%.2f",
+                ),
+            },
         )
 
     with st.expander("View daily sales table"):
@@ -1018,6 +1211,20 @@ elif page == "Olist Analytics":
             daily.sort_values("order_date"),
             use_container_width=True,
             hide_index=True,
+            column_config={
+                "product_revenue": st.column_config.NumberColumn(
+                    "Product Revenue (INR)",
+                    format="₹%.2f",
+                ),
+                "freight_total": st.column_config.NumberColumn(
+                    "Freight Total (INR)",
+                    format="₹%.2f",
+                ),
+                "payment_total": st.column_config.NumberColumn(
+                    "Payment Total (INR)",
+                    format="₹%.2f",
+                ),
+            },
         )
 
 
@@ -1185,8 +1392,23 @@ elif page == "Data Quality & Lineage":
             hide_index=True,
         )
 
-        st.write("**Revenue and row-count reconciliation**")
-        st.json(gold_report.get("reconciliation", {}))
+        st.write("**Revenue and row-count reconciliation (revenue displayed in INR)**")
+        reconciliation_display = gold_report.get(
+            "reconciliation", {}
+        ).copy()
+        revenue_fields = [
+            "source_item_revenue",
+            "fact_item_revenue",
+            "daily_product_revenue",
+            "category_product_revenue",
+            "seller_product_revenue",
+        ]
+        for field in revenue_fields:
+            if field in reconciliation_display:
+                reconciliation_display[field] = format_currency(
+                    reconciliation_display[field]
+                )
+        st.json(reconciliation_display)
 
     else:
         st.info("Gold quality report is unavailable.")
