@@ -216,6 +216,8 @@ streamlit run dashboard/retailflow_v2_app.py
 
 The V2 dashboard presents Platform Overview, Product Gallery, Olist Analytics, and Data Quality & Lineage. It reads generated local outputs; run the V2 pipeline first to populate its data files. The dashboard is separate from `dashboard/app.py`.
 
+After rerunning the V2 orchestrator, use **Refresh dashboard data** in the Streamlit sidebar to clear the dashboard cache and read the newly generated files. This button refreshes the dashboard only; it does not start the ETL pipeline.
+
 ## 7. Tests and continuous integration
 
 Run tests from the repository root:
