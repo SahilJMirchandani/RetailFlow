@@ -439,7 +439,7 @@ if page == "Platform Overview":
     ]
 
     product_columns = st.columns(
-        [2.2, 0.24, 2.2, 0.24, 2.2, 0.24, 2.2],
+        [2.2, 0.38, 2.2, 0.38, 2.2, 0.38, 2.2],
         gap="small",
     )
 
@@ -456,7 +456,7 @@ if page == "Platform Overview":
 
         if index < len(product_flow) - 1:
             with product_columns[index * 2 + 1]:
-                st.markdown("### →")
+                st.markdown("→")
 
     st.markdown("#### Olist Marketplace Warehouse Path")
 
@@ -494,7 +494,7 @@ if page == "Platform Overview":
     ]
 
     olist_columns = st.columns(
-        [2, 0.22, 2, 0.22, 2, 0.22, 2, 0.22, 2],
+        [2, 0.38, 2, 0.38, 2, 0.38, 2, 0.38, 2],
         gap="small",
     )
 
