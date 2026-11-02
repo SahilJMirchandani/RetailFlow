@@ -18,11 +18,11 @@ USD_TO_INR_SOURCE_URL = (
 )
 
 # Olist Brazilian e-commerce monetary values (BRL) -> INR. Historical
-# BRL/INR market observation for 9 October 2026.
-BRL_TO_INR_RATE = 17.4344
+# BRL/INR market observation for 2 November 2026.
+BRL_TO_INR_RATE = 17.4612
 BRL_TO_INR_RATE_AS_OF = "2 November 2026"
 BRL_TO_INR_SOURCE_URL = (
-    "https://www.exchangerates.org.uk/BRL-INR-spot-exchange-rates-history-2026.html"
+    "https://www.mataf.net/en/currency/converter-BRL-INR/data"
 )
 
 
@@ -80,3 +80,42 @@ def format_brl_as_inr(value):
         whole = ",".join(groups + [last_three])
 
     return f"{sign}₹{whole}.{fractional}"
+
+def format_brl_as_inr_compact(value):
+    """Format BRL as a compact INR metric (crore/lakh) for dashboard cards."""
+
+    try:
+        amount = Decimal(str(value if value is not None else 0))
+    except (InvalidOperation, ValueError, TypeError):
+        amount = Decimal("0")
+
+    if not amount.is_finite():
+        amount = Decimal("0")
+
+    converted = (
+        amount * Decimal(str(BRL_TO_INR_RATE))
+    ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    sign = "-" if converted < 0 else ""
+    absolute = abs(converted)
+
+    if absolute >= Decimal("10000000"):
+        display_value = (
+            absolute / Decimal("10000000")
+        ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        suffix = "Cr"
+    elif absolute >= Decimal("100000"):
+        display_value = (
+            absolute / Decimal("100000")
+        ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        suffix = "L"
+    elif absolute >= Decimal("1000"):
+        display_value = (
+            absolute / Decimal("1000")
+        ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        suffix = "K"
+    else:
+        return format_brl_as_inr(value)
+
+    return f"{sign}₹{display_value:,.2f} {suffix}"
+
