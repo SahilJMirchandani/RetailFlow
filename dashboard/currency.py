@@ -109,11 +109,6 @@ def format_brl_as_inr_compact(value):
             absolute / Decimal("100000")
         ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         suffix = "L"
-    elif absolute >= Decimal("1000"):
-        display_value = (
-            absolute / Decimal("1000")
-        ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        suffix = "K"
     else:
         return format_brl_as_inr(value)
 
