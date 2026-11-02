@@ -16,6 +16,7 @@ from dashboard.currency import (
     convert_brl_to_inr,
     convert_usd_to_inr,
     format_brl_as_inr,
+    format_brl_as_inr_compact,
 )
 
 
@@ -395,7 +396,7 @@ if page == "Platform Overview":
 
     col4.metric(
         "Product Revenue",
-        format_currency(product_revenue),
+        format_brl_as_inr_compact(product_revenue),
     )
     col5.metric("Catalogue Products", f"{product_count:,}")
     col6.metric("Local Image Files", f"{image_count:,}")
@@ -1039,8 +1040,8 @@ elif page == "Olist Analytics":
 
     col1.metric("Orders", f"{total_orders:,}")
     col2.metric("Order Items", f"{total_items:,}")
-    col3.metric("Product Revenue", format_currency(revenue))
-    col4.metric("Freight Value", format_currency(freight))
+    col3.metric("Product Revenue", format_brl_as_inr_compact(revenue))
+    col4.metric("Freight Value", format_brl_as_inr_compact(freight))
 
     st.divider()
 
