@@ -17,7 +17,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from botocore.exceptions import ClientError
 
-from aws.config import ROOT, load_aws_settings, require_aws_settings
+from aws.config import ROOT, require_aws_settings
 
 OUTPUT_DIR = ROOT / "data" / "output"
 PARQUET_INPUT_FORMAT = "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"
@@ -81,7 +81,7 @@ def s3_key_for_file(path: Path, root: Path, prefix: str) -> str:
         return f"{prefix}/gold/olist/{path.stem.lower()}/part-00000.parquet"
 
     if len(parts) >= 2 and parts[0] == "data" and parts[1] in {"bronze", "silver", "gold"}:
-        return "/".join((prefix, *parts))
+        return "/".join((prefix, *parts[1:]))
 
     if len(parts) >= 3 and parts[:2] == ("data", "output"):
         tail = parts[2:]
