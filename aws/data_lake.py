@@ -50,6 +50,7 @@ def collect_publish_files(root: Path = ROOT, upload_images: bool = False) -> lis
             if path.is_file() and (
                 path.name.endswith("_quality.json")
                 or path.name.endswith("_manifest.json")
+                or path.name.endswith("_manifest.csv")
             ):
                 selected.add(path)
 
@@ -276,7 +277,7 @@ def publish_data_and_register(root: Path = ROOT) -> dict:
         "bucket": settings["bucket"],
         "prefix": prefix,
         "glue_database": database,
-        "aws_identity_arn": identity.get("Arn", ""),
+        "aws_identity_validated": bool(identity.get("Arn")),
         "files_uploaded": sum(item["status"] == "uploaded" for item in results),
         "files_unchanged": sum(item["status"] == "unchanged" for item in results),
         "files": results,
