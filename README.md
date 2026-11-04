@@ -286,7 +286,7 @@ The local DuckDB transformations and dashboard continue to work without AWS. Whe
 
 ### IAM permissions and cost control
 
-The Learner Lab role must allow access to the chosen bucket (list bucket, read object metadata, and put objects), Glue database/table read and write operations, and Athena query execution/results. The Athena results prefix must also be writable. If the lab role denies a service, the command reports the AWS error; do not try to bypass Learner Lab restrictions.
+The Learner Lab role must allow `sts:GetCallerIdentity`; S3 `s3:ListBucket` and `s3:GetBucketLocation` on the bucket, plus `s3:GetObject` and `s3:PutObject` on the RetailFlow prefix; Glue `GetDatabase`, `CreateDatabase`, `GetTable`, `CreateTable` and `UpdateTable`; and Athena `GetWorkGroup`, `StartQueryExecution`, `GetQueryExecution`, `GetQueryResults` and `StopQueryExecution`. The Athena results prefix must also be writable/readable by the role. If the lab role denies a service, the command reports the AWS error; do not try to bypass Learner Lab restrictions.
 
 S3 storage and Athena scans can incur charges against the Learner Lab budget/credits. This project does not claim that AWS usage is free. Keep the image upload option disabled, query Parquet Gold tables with a small `LIMIT`, avoid repeated full scans, and remove test outputs from S3 when the assignment is finished and the lab policy permits it. No always-on compute service is provisioned.
 
@@ -295,7 +295,7 @@ S3 storage and Athena scans can incur charges against the Learner Lab budget/cre
 Run tests from the repository root:
 
 ```powershell
-python -m compileall -q dashboard ingestion etl pipeline tests
+python -m compileall -q aws dashboard ingestion etl pipeline tests
 python -m pytest -q
 ```
 
