@@ -234,7 +234,7 @@ The local DuckDB transformations and dashboard continue to work without AWS. Whe
 
 ### Configure your existing VESIT AWS Academy Learner Lab
 
-1. Start the AWS Academy Learner Lab using your VES ID and wait for the lab status to become active. Use the AWS CLI credential block shown under **AWS Details** in the lab. Paste that temporary credential block into the PowerShell terminal that will run RetailFlow. Do not paste the keys into chat, source files, screenshots, or `.env`. The credentials expire with the lab session and must be refreshed when the lab restarts.
+1. Start the AWS Academy Learner Lab using your VES ID and wait for the lab status to become active. Open **AWS Details → AWS CLI**. Use the temporary access-key ID, secret access key and session token from that panel to configure the AWS CLI credential provider on your Windows machine (for example, the `[default]` profile in `%USERPROFILE%\\.aws\\credentials`, or the environment variables in the same PowerShell session). Do not paste the raw INI profile block directly as a PowerShell command. Do not send the keys in chat or put them in source files, screenshots, or `.env`. The credentials expire with the lab session and must be refreshed when the lab restarts.
 2. Confirm the terminal is authenticated:
 
    ```powershell
