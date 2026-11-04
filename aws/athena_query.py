@@ -25,7 +25,9 @@ def validate_read_only_sql(sql: str) -> str:
         raise ValueError("Provide one read-only SQL statement without comments or extra statements.")
     if not re.match(r"^(SELECT|SHOW|DESCRIBE|EXPLAIN)\b", query, re.IGNORECASE):
         raise ValueError("Only SELECT, SHOW, DESCRIBE and EXPLAIN statements are allowed.")
-    if query.upper().startswith("SELECT ") and not re.search(r"\bLIMIT\s+\d+\b", query, re.IGNORECASE):
+    if re.match(r"^SELECT\b", query, re.IGNORECASE) and not re.search(
+        r"\bLIMIT\s+\d+\b", query, re.IGNORECASE
+    ):
         raise ValueError("Add LIMIT <n> to SELECT queries to keep exploratory result sets bounded.")
     return query
 
