@@ -17,14 +17,14 @@ from aws.athena_query import validate_read_only_sql
 
 
 def test_aws_settings_disabled_by_default(monkeypatch):
-    monkeypatch.delenv("RETAILFLOW_AWS_ENABLED", raising=False)
+    monkeypatch.setenv("RETAILFLOW_AWS_ENABLED", "false")
     settings = load_aws_settings()
     assert settings["enabled"] is False
 
 
 def test_require_aws_settings_requires_existing_bucket(monkeypatch):
     monkeypatch.setenv("RETAILFLOW_AWS_ENABLED", "true")
-    monkeypatch.delenv("RETAILFLOW_AWS_BUCKET", raising=False)
+    monkeypatch.setenv("RETAILFLOW_AWS_BUCKET", "")
     with pytest.raises(RuntimeError, match="RETAILFLOW_AWS_BUCKET"):
         require_aws_settings()
 
@@ -40,6 +40,17 @@ def test_s3_key_for_gold_table_uses_separate_table_prefix(tmp_path):
     path = tmp_path / "data" / "gold" / "olist" / "gold_daily_sales.parquet"
     expected = "retailflow/gold/olist/gold_daily_sales/part-00000.parquet"
     assert s3_key_for_file(path, tmp_path, "retailflow") == expected
+
+
+def test_s3_key_for_bronze_and_silver_keep_layer_prefix(tmp_path):
+    bronze = tmp_path / "data" / "bronze" / "olist" / "orders.parquet"
+    silver = tmp_path / "data" / "silver" / "olist" / "orders.parquet"
+    assert s3_key_for_file(bronze, tmp_path, "retailflow") == (
+        "retailflow/bronze/olist/orders.parquet"
+    )
+    assert s3_key_for_file(silver, tmp_path, "retailflow") == (
+        "retailflow/silver/olist/orders.parquet"
+    )
 
 
 def test_s3_key_for_metadata_uses_metadata_prefix(tmp_path):
