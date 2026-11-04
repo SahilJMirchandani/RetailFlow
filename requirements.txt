@@ -1,4 +1,3 @@
-
 pandas
 numpy
 openpyxl
@@ -12,3 +11,4 @@ python-dotenv
 pyarrow
 requests
 duckdb
+boto3
