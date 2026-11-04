@@ -304,3 +304,25 @@ def publish_data_and_register(root: Path = ROOT) -> dict:
     report["s3_manifest_uri"] = f"s3://{settings['bucket']}/{manifest_key}"
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     return report
+
+
+def sync_lineage_to_s3(root: Path = ROOT) -> int:
+    """Copy the just-written latest-run JSON and append-only JSONL history to S3."""
+    settings = require_aws_settings()
+    profile = os.getenv("AWS_PROFILE")
+    session_args = {"region_name": settings["region"]}
+    if profile:
+        session_args["profile_name"] = profile
+    s3 = boto3.Session(**session_args).client("s3")
+    lineage_dir = root / "data" / "output" / "lineage"
+    if not lineage_dir.is_dir():
+        return 0
+    count = 0
+    for name in ("pipeline_run_latest.json", "pipeline_runs.jsonl"):
+        path = lineage_dir / name
+        if not path.is_file():
+            continue
+        key = f"{settings['prefix']}/metadata/lineage/{name}"
+        _upload_one(s3, settings["bucket"], path, key)
+        count += 1
+    return count
