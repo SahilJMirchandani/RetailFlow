@@ -1,6 +1,11 @@
 """Command-line entry point for publishing RetailFlow 2.0 to AWS."""
 import json
 import sys
+from pathlib import Path
+
+# This script is also launched directly by the V2 orchestrator.
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from botocore.exceptions import BotoCoreError, ClientError
 
