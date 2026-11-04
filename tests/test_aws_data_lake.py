@@ -127,6 +127,7 @@ def test_athena_query_accepts_read_only_sql():
         "CREATE TABLE unsafe AS SELECT 1",
         "SELECT 1; DROP TABLE gold_daily_sales",
         "SELECT 1 -- comment",
+        "SELECT * FROM gold_daily_sales",
     ],
 )
 def test_athena_query_rejects_unsafe_or_multiple_statements(sql):
