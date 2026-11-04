@@ -12,6 +12,10 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+# Make the project package root importable when this file is run directly.
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 OUTPUT_DIR = PROJECT_ROOT / "data" / "output"
 LOG_DIR = OUTPUT_DIR / "logs"
 LINEAGE_DIR = OUTPUT_DIR / "lineage"
