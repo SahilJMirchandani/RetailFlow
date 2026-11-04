@@ -57,13 +57,15 @@ Olist CSV files ──→ Bronze Parquet
           Business sales aggregates + quality reports
 ```
 
-The orchestrator runs five stages in order:
+The orchestrator runs five local stages in order:
 
 1. Product Catalogue API Ingestion
 2. Product Image Ingestion
 3. Olist Bronze Ingestion
 4. Olist Silver Transformation
 5. Olist Gold Warehouse
+
+When `RETAILFLOW_AWS_ENABLED=true` is set, a sixth stage publishes the completed Bronze/Silver/Gold Parquet layers and selected quality/lineage metadata to an existing Amazon S3 bucket, then registers the nine Gold tables in the AWS Glue Data Catalog. The local stages remain unchanged and are still the source of truth.
 
 A stage failure stops the sequence. The V2 workflow writes timestamped logs and a latest-run record plus append-only JSONL history to `data/output/`.
 
@@ -218,12 +220,82 @@ The V2 dashboard presents Platform Overview, Product Gallery, Olist Analytics, a
 
 After rerunning the V2 orchestrator, use **Refresh dashboard data** in the Streamlit sidebar to clear the dashboard cache and read the newly generated files. This button refreshes the dashboard only; it does not start the ETL pipeline.
 
-## 7. Tests and continuous integration
+## 7. Optional AWS integration — S3, Glue Data Catalog and Athena
+
+RetailFlow can publish its completed V2 data lake to your existing AWS Academy Learner Lab environment. **No new AWS account is required.** The integration is opt-in, uses the AWS SDK credential chain, and does not create a bucket, EC2 instance, Glue crawler, Glue ETL job, or long-running compute service.
+
+### AWS architecture
+
+- **Amazon S3:** stores the existing Bronze, Silver and Gold Parquet layers plus selected quality reports and pipeline lineage. Uploads request S3-managed server-side encryption (AES256). Raw input CSV files and local `.env` credentials are excluded. Product images are excluded by default.
+- **AWS Glue Data Catalog:** creates or updates a database and registers the nine Olist Gold Parquet tables as external tables.
+- **Amazon Athena:** runs read-only SQL queries against the Glue tables. Query results are written to the configured S3 results prefix.
+
+The local DuckDB transformations and dashboard continue to work without AWS. When AWS is enabled, the V2 orchestrator adds an AWS publication stage after the five local stages. The dashboard's Data Quality & Lineage page displays the latest local AWS publication receipt; it does not poll AWS on every page load.
+
+### Configure your existing VESIT AWS Academy Learner Lab
+
+1. Start the AWS Academy Learner Lab using your VES ID and wait for the lab status to become active. Open **AWS Details → AWS CLI**. Use the temporary access-key ID, secret access key and session token from that panel to configure the AWS CLI credential provider on your Windows machine (for example, the `[default]` profile in ``$HOME\\.aws\\credentials``, or the environment variables in the same PowerShell session). Do not paste the raw INI profile block directly as a PowerShell command. Do not send the keys in chat or put them in source files, screenshots, or `.env`. The credentials expire with the lab session and must be refreshed when the lab restarts.
+2. Confirm the terminal is authenticated:
+
+   ```powershell
+   aws sts get-caller-identity
+   ```
+
+   Do not continue until this succeeds. If you are using CloudShell, note that CloudShell's session is separate from your Windows terminal; use the lab-provided temporary CLI credentials locally when running RetailFlow on Windows.
+3. Use an **existing S3 bucket** that belongs to your Learner Lab account. Set its region correctly. This integration does not create a bucket automatically. If you do not already have one, create a single bucket from the S3 console only if your Learner Lab permissions allow it.
+4. From the RetailFlow project root, copy the safe template and edit the AWS settings:
+
+   ```powershell
+   Copy-Item .env.example .env
+   ```
+
+   Keep your existing PostgreSQL values if you use Track A. Set the following values in `.env`:
+
+   ```dotenv
+   RETAILFLOW_AWS_ENABLED=true
+   RETAILFLOW_AWS_REGION=ap-south-1
+   RETAILFLOW_AWS_BUCKET=your-existing-bucket-name
+   RETAILFLOW_AWS_PREFIX=retailflow
+   RETAILFLOW_GLUE_DATABASE=retailflow
+   RETAILFLOW_ATHENA_WORKGROUP=primary
+   RETAILFLOW_ATHENA_OUTPUT_LOCATION=
+   RETAILFLOW_AWS_UPLOAD_IMAGES=false
+   ```
+
+   Replace the bucket name and set the region to the actual bucket region. Leave the Athena output location blank to use `s3://<bucket>/retailflow/athena-results/`. Do not place access keys or session tokens in `.env`.
+5. Install the AWS SDK dependency and run the normal V2 pipeline:
+
+   ```powershell
+   .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+   .\.venv\Scripts\python.exe pipeline\run_retailflow_v2.py
+   ```
+
+   After the five local stages succeed, the optional sixth stage uploads Parquet and metadata objects, verifies uploaded object sizes, and registers Gold tables in Glue. A failed AWS publication is recorded as a failed pipeline run rather than silently reported as success.
+6. Confirm the publication receipt at `data/output/aws_publication_latest.json` and inspect the S3 bucket. The dashboard's **Data Quality & Lineage → AWS Data Lake** section also shows the latest successful publication receipt.
+7. Run the sample Athena query:
+
+   ```powershell
+   .\.venv\Scripts\python.exe -m aws.athena_query
+   ```
+
+   It runs a read-only query against `gold_daily_sales`. You can supply another read-only query with `--sql`, for example:
+
+   ```powershell
+   .\.venv\Scripts\python.exe -m aws.athena_query --sql "SELECT * FROM gold_category_sales LIMIT 10"
+   ```
+
+### IAM permissions and cost control
+
+The Learner Lab role must allow `sts:GetCallerIdentity`; S3 `s3:ListBucket` and `s3:GetBucketLocation` on the bucket, plus `s3:GetObject` and `s3:PutObject` on the RetailFlow prefix; Glue `GetDatabase`, `CreateDatabase`, `GetTable`, `CreateTable` and `UpdateTable`; and Athena `GetWorkGroup`, `StartQueryExecution`, `GetQueryExecution`, `GetQueryResults` and `StopQueryExecution`. The Athena results prefix must also be writable/readable by the role. If the lab role denies a service, the command reports the AWS error; do not try to bypass Learner Lab restrictions.
+
+S3 storage and Athena scans can incur charges against the Learner Lab budget/credits. This project does not claim that AWS usage is free. Keep the image upload option disabled, query Parquet Gold tables with a small `LIMIT`, avoid repeated full scans, and remove test outputs from S3 when the assignment is finished and the lab policy permits it. No always-on compute service is provisioned.
+
+## 8. Tests and continuous integration
 
 Run tests from the repository root:
 
 ```powershell
-python -m compileall -q dashboard ingestion etl pipeline tests
+python -m compileall -q aws dashboard ingestion etl pipeline tests
 python -m pytest -q
 ```
 
@@ -235,7 +307,7 @@ The legacy tests in `tests/test_pipeline.py` validate outputs generated by Track
 
 GitHub Actions runs Python compilation and the test suite on pushes to the main and feature branches and for pull requests to main. CI uses synthetic data and does not download or commit the real datasets.
 
-## 8. Important data and security notes
+## 9. Important data and security notes
 
 - Do not commit `.env`, passwords, access tokens, or database credentials.
 - Input datasets and generated Bronze/Silver/Gold Parquet, CSV outputs, logs, reports, and product images are intentionally ignored by Git.
@@ -244,10 +316,10 @@ GitHub Actions runs Python compilation and the test suite on pushes to the main 
 - Olist dashboard and analytics monetary values are converted from BRL to INR at the pinned historical rate **₹17.4612 per R$1 (2 November 2026)**. See [Mataf historical BRL/INR data](https://www.mataf.net/en/currency/converter-BRL-INR/data). This is a dated display rate, not a live quote; raw Olist datasets and generated quality reports remain in BRL.
 - Do not compare or combine revenue across the UK-retailer and Brazilian-marketplace tracks without explicitly accounting for their different currencies and datasets.
 
-## 9. Technology stack
+## 10. Technology stack
 
-Python · pandas · NumPy · PyArrow/Parquet · DuckDB · PostgreSQL · scikit-learn · Streamlit · Plotly · Requests · Pytest · GitHub Actions
+Python · pandas · NumPy · PyArrow/Parquet · DuckDB · PostgreSQL · scikit-learn · Streamlit · Plotly · Requests · boto3 · Amazon S3 · AWS Glue Data Catalog · Amazon Athena · Pytest · GitHub Actions
 
-## 10. Next improvements
+## 11. Next improvements
 
 Potential later enhancements include incremental ingestion, snapshot freshness checks, schema versioning, a more formal data-contract layer, Docker packaging, deployment, and scheduled execution. They are intentionally separate from the current scope so the existing workflows stay understandable and reproducible.

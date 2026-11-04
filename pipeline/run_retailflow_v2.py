@@ -12,6 +12,10 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+# Make the project package root importable when this file is run directly.
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 OUTPUT_DIR = PROJECT_ROOT / "data" / "output"
 LOG_DIR = OUTPUT_DIR / "logs"
 LINEAGE_DIR = OUTPUT_DIR / "lineage"
@@ -70,6 +74,25 @@ STAGES = [
         ],
     },
 ]
+
+
+def build_stages():
+    """Return local stages plus the AWS publication stage when enabled."""
+    stages = list(STAGES)
+    from aws.config import load_aws_settings
+
+    if load_aws_settings()["enabled"]:
+        stages.append({
+            "name": "AWS Data Lake Publication (S3 + Glue)",
+            "script": "aws/publish_to_aws.py",
+            "inputs": ["data/bronze/", "data/silver/", "data/gold/"],
+            "outputs": [
+                "S3 Bronze/Silver/Gold data lake",
+                "AWS Glue Data Catalog Gold tables",
+                "data/output/aws_publication_latest.json",
+            ],
+        })
+    return stages
 
 
 def utc_now():
@@ -317,6 +340,7 @@ def save_run_record(record):
 def run_retailflow_v2():
     """Run the new catalogue and Olist pipelines in sequence."""
 
+    stages = build_stages()
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     LINEAGE_DIR.mkdir(parents=True, exist_ok=True)
@@ -333,7 +357,7 @@ def run_retailflow_v2():
         "started_at_utc": started_at,
         "finished_at_utc": None,
         "duration_seconds": None,
-        "stage_count": len(STAGES),
+        "stage_count": len(stages),
         "stages": [],
         "metrics": {},
         "lineage": {
@@ -354,11 +378,11 @@ def run_retailflow_v2():
     print("=" * 75)
     print(f"Run ID : {run_id}")
     print(f"Started: {started_at}")
-    print(f"Stages : {len(STAGES)}")
+    print(f"Stages : {len(stages)}")
     print("")
 
     try:
-        for stage in STAGES:
+        for stage in stages:
             result = execute_stage(stage, log_file)
             record["stages"].append(result)
 
@@ -376,7 +400,7 @@ def run_retailflow_v2():
     finally:
         if record["status"] == "running":
             all_succeeded = (
-                len(record["stages"]) == len(STAGES)
+                len(record["stages"]) == len(stages)
                 and all(
                     stage["status"] == "success"
                     for stage in record["stages"]
@@ -411,6 +435,16 @@ def run_retailflow_v2():
             print(f"Could not save lineage report: {error}")
             record["status"] = "failed"
 
+        # Store the completed run record in S3 after its local atomic write.
+        # A lineage-copy warning does not erase a successful local ETL result.
+        if record["status"] == "success" and len(stages) > len(STAGES):
+            try:
+                from aws.data_lake import sync_lineage_to_s3
+                synced = sync_lineage_to_s3()
+                print(f"AWS lineage files synchronized: {synced}")
+            except Exception as error:
+                print(f"AWS lineage sync warning: {error}")
+
     print("\n" + "=" * 75)
     print("RETAILFLOW 2.0 PIPELINE SUMMARY")
     print("=" * 75)
@@ -419,7 +453,7 @@ def run_retailflow_v2():
     print(
         f"Stages passed: "
         f"{sum(s['status'] == 'success' for s in record['stages'])}"
-        f"/{len(STAGES)}"
+        f"/{len(stages)}"
     )
     print(f"Duration     : {record['duration_seconds']} seconds")
     print(f"Latest report: {LATEST_RUN_FILE}")
